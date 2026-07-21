@@ -1,110 +1,109 @@
 # Instantly Reply Bot
 
-Receives `reply_received` webhooks from [Instantly.ai](https://instantly.ai), classifies each reply with OpenAI, and routes it to exactly one of three outcomes:
+Receives `reply_received` webhooks from [Instantly.ai](https://instantly.ai) — one webhook URL per client workspace — classifies each reply with OpenAI, and routes it to exactly one of three outcomes:
 
 | Outcome | When | What happens |
 | --- | --- | --- |
-| **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. No notification. |
-| **draft** | Intent matches a reply template *and* confidence ≥ threshold | Template rendered with the lead's details, posted to Discord for you to approve and send. |
-| **alert** | Positive/engaged reply with no matching template, an objection, a complex negative, or low confidence | Posted to Discord with the reply, the classification, and why it needs you. |
+| **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. Opt-outs and declines are also marked unsubscribed in that client's Instantly workspace. |
+| **draft** | Intent matches a reply template, confidence ≥ threshold, no escalation flags | Template rendered with the lead's details and the client's profile, posted to that client's Discord channel for approval. |
+| **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence | Posted to Discord with the reply, the classification, and why it needs you. |
 
 Nothing is sent to a prospect automatically — the bot drafts, you send.
+
+## Multi-client architecture
+
+Each client (Instantly workspace) gets:
+
+- **Their own webhook URL** — `POST /webhooks/instantly/<slug>`. The slug selects the profile; no campaign-ID bookkeeping.
+- **A profile in `config/clients.json`** — calendar link, sender name, pitch (`whatWeDo`), pricing copy (`pricingInfo`), differentiator, Discord sub-channel webhook, and the *name* of the env var holding their Instantly API key. See [config/clients.example.json](config/clients.example.json).
+- **Optional template customization** — per-template copy overrides and a `disabledTemplates` list.
+
+A webhook hitting an unknown slug still gets classified, but **never drafts** (it can't know whose calendar to offer) — it alerts to the global Discord channel as "unconfigured webhook" instead. Onboarding a client = add a profile, create their Discord channel webhook, set their API key env var, point their Instantly workspace at their URL.
+
+`config/clients.json` is gitignored (it contains Discord webhook URLs). Copy the example and fill it in, or put the whole JSON in the `CLIENTS_JSON` env var on hosts without a persistent disk.
 
 ## How a reply flows
 
 ```
-Instantly webhook
+Instantly webhook (per-client URL)
   → normalize   strip quoted history & signatures, flatten lead fields
   → classify    rules fast-path for bare opt-outs, else OpenAI structured output
-  → decide      ignore / draft / alert
-  → notify      Discord embed (draft or alert)
+  → decide      ignore / draft / alert  (+ mark-unsubscribed side effect)
+  → notify      Discord embed in the client's sub-channel
 ```
 
 Each stage lives in its own module: [normalize.ts](src/core/normalize.ts), [classify/](src/classify/), [decide.ts](src/core/decide.ts), [discord.ts](src/integrations/discord.ts), wired together in [pipeline.ts](src/core/pipeline.ts).
+
+## Routing rules (in evaluation order)
+
+1. **Ignore + unsubscribe**: bare `unsubscribe` / `not_interested` replies are dropped and the lead is added to that workspace's block list via the Instantly API. OOO and auto-replies are dropped without the API call.
+2. **Complex negatives alert**: any negative reply with substance (a reason, a complaint, anger) — even an angry unsubscribe, which *also* still gets the unsubscribe API call.
+3. **Deterministic guards** (from the reply playbook): more than 150 words / 900 characters, or more than 2 questions → alert. Counted in code, not judged by the model.
+4. **Escalation flags** → alert regardless of intent: `named_competitor`, `referral_mention`, `existing_relationship`, `legal_or_contract`, `negotiation_terms`, `technical_deep_dive`, `press_media`, `sensitive_info`.
+5. **Always-alert intents**: `referral` (both directions — handled personally), `objection`, `unclear`.
+6. **Low confidence** (< `CONFIDENCE_THRESHOLD`, default 0.7) → alert.
+7. **Template lookup** under the client's config → draft, or alert if no template / template disabled / a needed profile field is blank.
+
+That last point is a feature: a client with an empty `pricingInfo` simply has pricing replies escalated to Discord instead of auto-drafted. Blank fields degrade to human handling, never to broken drafts.
+
+## Templates
+
+Defaults live in [src/templates/registry.ts](src/templates/registry.ts), copy from the reply playbook:
+
+| id | intents | needs profile field |
+| --- | --- | --- |
+| `book_call` | interested, meeting_request | calendarLink |
+| `what_we_do` | info_request | whatWeDo, calendarLink |
+| `pricing` | pricing_request | pricingInfo, calendarLink |
+| `proof` | proof_request | calendarLink |
+| `how_found_you` | how_did_you_find_us | — |
+| `existing_provider` | existing_provider | differentiator, calendarLink |
+| `follow_up_later` | not_now_follow_up_later | — (timeframe extracted from the reply) |
+| `wrong_person` | wrong_person | — |
+
+Placeholders: `firstName`, `lastName`, `fullName`, `companyName` (the **prospect's** company), `ourCompanyName` (the client's), `email`, `website`, `phone`, `originalSubject`, `campaignName`, `senderName`, `clientName`, `calendarLink`, `whatWeDo`, `pricingInfo`, `differentiator`, `followUpTimeframe`, plus any custom lead variable from the Instantly payload.
+
+`firstName`, `companyName`, `originalSubject`, and `followUpTimeframe` soften to friendly defaults when blank; any other blank placeholder aborts the draft and alerts instead.
 
 ## Setup
 
 ```bash
 npm install
-cp .env.example .env   # then fill it in
+cp .env.example .env                              # fill in
+cp config/clients.example.json config/clients.json # fill in
 npm run dev
 ```
 
-Required env vars — see [.env.example](.env.example) for the full list:
+Global env vars: `WEBHOOK_SECRET`, `OPENAI_API_KEY`, `DISCORD_WEBHOOK_URL` (catch-all channel), `CONFIDENCE_THRESHOLD`, plus one `INSTANTLY_API_KEY_<CLIENT>` per workspace (names declared in clients.json).
 
-- `WEBHOOK_SECRET` — a long random string; Instantly must send it back
-- `OPENAI_API_KEY` — classification
-- `DISCORD_WEBHOOK_URL` — where drafts and alerts land
-- `CALENDAR_LINK`, `SENDER_NAME` — filled into templates
+### Point each Instantly workspace at its URL
 
-`INSTANTLY_API_KEY` is optional and unused in draft-only mode. Add it when you want lead enrichment or auto-send.
-
-### Point Instantly at it
-
-In Instantly: **Settings → Integrations → Webhooks → Add webhook**
+In that workspace: **Settings → Integrations → Webhooks → Add webhook**
 
 - Event: `Reply Received`
-- URL: `https://your-host/webhooks/instantly`
-- Header: `X-Webhook-Secret: <your WEBHOOK_SECRET>`
-
-If Instantly's UI won't let you set a custom header on your plan, append the secret as a query param instead: `https://your-host/webhooks/instantly?secret=<your WEBHOOK_SECRET>`.
+- URL: `https://your-host/webhooks/instantly/<slug>`
+- Header: `X-Webhook-Secret: <your WEBHOOK_SECRET>` (or append `?secret=...` if your plan hides custom headers)
 
 The endpoint replies `202` immediately and processes out of band, so a slow OpenAI call never triggers an Instantly redelivery.
 
-## Reply templates
-
-Templates live in [src/templates/registry.ts](src/templates/registry.ts). Each declares the intents it answers:
-
-```ts
-{
-  id: 'meeting_request',
-  intents: ['meeting_request'],
-  subject: 'Re: {{originalSubject}}',
-  body: `Hi {{firstName}}, ...`,
-}
-```
-
-Shipped: `meeting_request`, `pricing_request`, `interested_generic`, `referral`, `wrong_person`, `follow_up_later`.
-
-**Any intent with no template escalates to Discord instead.** That's the designed fallback, so deleting a template is safe — it turns those replies into alerts, never into silence.
-
-Available placeholders: `firstName`, `lastName`, `fullName`, `companyName`, `email`, `website`, `phone`, `originalSubject`, `campaignName`, `senderName`, `senderCompany`, `calendarLink`, plus any custom lead variable Instantly includes in the payload.
-
-`firstName`, `companyName`, and `originalSubject` fall back to friendly defaults when blank ("there", "your team"). Any *other* placeholder that resolves empty aborts the draft and sends an alert instead — better a human handles it than a prospect receives `{{calendarLink}}`.
-
-## Intents
-
-`interested`, `meeting_request`, `pricing_request`, `info_request`, `referral`, `wrong_person`, `not_now_follow_up_later`, `objection`, `not_interested`, `unsubscribe`, `out_of_office`, `auto_reply`, `unclear`.
-
-Two flags drive routing alongside the intent:
-
-- **`confidence`** — below `CONFIDENCE_THRESHOLD` (default 0.7) the reply goes to a human regardless of intent.
-- **`isComplexNegative`** — a negative reply carrying a reason, question, or complaint. Always alerts, even for `unsubscribe`, so an angry "remove me and stop buying lists" doesn't get silently dropped.
-
 ## Testing locally
 
-Replay a sample payload against the pipeline without a server or an Instantly account:
-
 ```bash
-npx tsx scripts/replay.ts "Sounds interesting - can we talk Thursday?"
-npx tsx scripts/replay.ts "unsubscribe"
+npx tsx scripts/replay.ts --client raz "Sounds interesting - can we talk Thursday?"
+npx tsx scripts/replay.ts --client acme --dry "how much does it cost?"
+npm test && npm run typecheck
 ```
 
-Run the suite:
-
-```bash
-npm test
-npm run typecheck
-```
-
-Tests cover the routing matrix ([decide.test.ts](test/decide.test.ts)) and the rules fast-path plus quoted-reply stripping ([classify.rules.test.ts](test/classify.rules.test.ts)). Neither hits the network.
+The suite covers the full routing matrix, per-client overrides, the playbook guards, and quoted-reply stripping — no network access needed.
 
 ## Failure behaviour
 
-- **OpenAI down or returns garbage** → reply is classified `unclear` at confidence 0 → alerts to Discord. Replies degrade to "a human reads it", never to lost.
-- **Discord down** → logged, still `202` to Instantly. The reply is not retried.
-- **Bad secret** → `401`. **Malformed payload** → `400` (not `500`, since redelivering it won't help).
+- **OpenAI down** → reply classified `unclear` at confidence 0 → alert. Replies degrade to "a human reads it", never to lost.
+- **Unsubscribe API call fails** → a warning posts to the client's Discord channel asking for a manual unsubscribe. No key configured → skipped with a log line.
+- **Discord down** → logged, still `202` to Instantly.
+- **Unknown webhook slug** → classified + alerted to the global channel, never drafted.
+- **Bad secret** → `401`. **Malformed payload** → `400`.
 
 ## Enabling auto-send later
 
-[instantly.ts](src/integrations/instantly.ts) has a working `sendReply` that is deliberately not called. To flip it on, call it from the `draft` branch of [pipeline.ts](src/core/pipeline.ts) and set `INSTANTLY_API_KEY`. Consider restricting it to a subset of templates first.
+[instantly.ts](src/integrations/instantly.ts) has a working per-client `sendReply` that is deliberately never called. To flip it on, call it from the `draft` branch of [pipeline.ts](src/core/pipeline.ts). The `/emails/reply` and `/block-lists-entries` payload shapes are written from the documented v2 API — verify both against a live key before relying on them.

@@ -1,7 +1,13 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import { getConfig } from '../core/config.js';
-import { INTENTS, SENTIMENTS, type Classification, type ReplyEvent } from '../core/types.js';
+import {
+  ESCALATION_FLAGS,
+  INTENTS,
+  SENTIMENTS,
+  type Classification,
+  type ReplyEvent,
+} from '../core/types.js';
 
 let client: OpenAI | undefined;
 
@@ -21,6 +27,8 @@ const ResponseSchema = z.object({
   confidence: z.number().min(0).max(1),
   reasoning: z.string(),
   is_complex_negative: z.boolean(),
+  flags: z.array(z.enum(ESCALATION_FLAGS)),
+  follow_up_timeframe: z.string(),
   notes: z.string(),
 });
 
@@ -28,26 +36,41 @@ const SYSTEM_PROMPT = `You classify replies to cold sales emails. You are the ro
 
 Return exactly one intent:
 
-- interested — expresses genuine interest, wants to learn more, positive but no specific ask.
-- meeting_request — wants a call/demo/meeting, or proposes times.
-- pricing_request — asks about cost, pricing, plans, or budget.
-- info_request — asks a substantive question about the product, process, or company that is not pricing.
-- referral — points to a different person or team as the right contact.
+- interested — expresses genuine interest or openness ("sure", "sounds interesting", "tell me more", "send me some info") without a specific question.
+- meeting_request — wants a call/demo/meeting, asks about availability, or proposes times.
+- pricing_request — asks about cost, rates, fees, payment structure, or commitment terms.
+- info_request — asks a SIMPLE question about what the company does or offers ("what exactly do you do?", "how does this work?", "what is this about?"). If the question digs into methodology, technology, data, or process details, keep this intent but add the technical_deep_dive flag.
+- proof_request — asks for case studies, results, references, client names, or evidence it works.
+- how_did_you_find_us — asks how you got their email/contact details, including a simple "is this GDPR compliant?". Do NOT add legal_or_contract for that simple question alone.
+- existing_provider — says they already have an agency/vendor for this, handle it internally, or tried something similar before. Use this instead of objection for that specific pushback.
+- referral — hands you a DIFFERENT person or team as the better contact ("talk to our CMO, jane@…").
 - wrong_person — says they are not the right contact, without naming an alternative.
 - not_now_follow_up_later — open in principle but wants contact deferred (busy, next quarter, after a launch).
-- objection — engaged but pushing back (already have a vendor, no budget, bad timing framed as a reason, skepticism). Use this when there is a stated reason worth a human response.
+- objection — engaged but pushing back for a stated reason other than having an existing provider (no budget, skepticism, bad timing framed as a reason).
 - not_interested — declines without a reason worth responding to.
-- unsubscribe — asks to be removed from the list, or threatens spam reporting / legal action.
+- unsubscribe — asks to be removed from the list, or threatens spam reporting.
 - out_of_office — automated absence notice.
 - auto_reply — other automated mail (bounce, ticket ack, delivery notice).
 - unclear — cannot be determined, or the message is empty/garbled.
 
+Escalation flags — include EVERY one that applies; any flag routes the reply to a human instead of an automated draft:
+
+- named_competitor — a specific competitor/vendor is named ("we use Belkins").
+- referral_mention — someone referred THEM to us, or they mention a mutual contact ("John at Acme mentioned you"). Direction matters: them pointing us to a colleague is the referral INTENT, not this flag.
+- existing_relationship — indicates they know us or we have spoken before.
+- legal_or_contract — contracts, lawyers, legal threats, formal compliance demands, or detailed data-protection questions beyond a simple "is this GDPR compliant?".
+- negotiation_terms — mentions specific numbers, prices, contract lengths, or terms of their own.
+- technical_deep_dive — detailed questions about methodology, technology, tooling, or process.
+- press_media — journalism, articles, podcasts, or public coverage.
+- sensitive_info — the reply shares confidential business or personal information.
+
 Also set:
 - sentiment: positive | neutral | negative — the person's disposition toward us.
 - confidence: 0..1. Be honest. Below 0.7 routes to a human instead of an automated draft.
-- is_complex_negative: true when the reply is negative AND contains more than a bare refusal — a reason, a question, a complaint, an accusation, or anything a human should read. A bare "no", "not interested", "stop", or "remove me" is NOT complex.
+- is_complex_negative: true when the reply is negative AND contains more than a bare refusal — a reason, a question, a complaint, anger, an accusation, or anything a human should read. A bare "no", "not interested", "stop", or "remove me" is NOT complex.
+- follow_up_timeframe: ONLY for not_now_follow_up_later — the timing phrase with its preposition, ready to complete the sentence "I'll follow up with you ___" (e.g. "in Q4", "in January", "in a few weeks"). Empty string otherwise or if no timing was given.
 - reasoning: one sentence, under 200 characters.
-- notes: any concrete detail worth carrying forward (referred name/email, requested timing, named competitor, specific question). Empty string if none.
+- notes: any concrete detail worth carrying forward (referred name/email, named competitor, specific question asked). Empty string if none.
 
 Judge only the person's own words. Ignore quoted history and signatures.`;
 
@@ -91,6 +114,8 @@ export async function classifyWithOpenAI(event: ReplyEvent): Promise<Classificat
             'confidence',
             'reasoning',
             'is_complex_negative',
+            'flags',
+            'follow_up_timeframe',
             'notes',
           ],
           properties: {
@@ -99,6 +124,8 @@ export async function classifyWithOpenAI(event: ReplyEvent): Promise<Classificat
             confidence: { type: 'number' },
             reasoning: { type: 'string' },
             is_complex_negative: { type: 'boolean' },
+            flags: { type: 'array', items: { type: 'string', enum: [...ESCALATION_FLAGS] } },
+            follow_up_timeframe: { type: 'string' },
             notes: { type: 'string' },
           },
         },
@@ -121,6 +148,8 @@ export async function classifyWithOpenAI(event: ReplyEvent): Promise<Classificat
     confidence: parsed.confidence,
     reasoning: parsed.reasoning,
     isComplexNegative: parsed.is_complex_negative,
+    flags: parsed.flags,
+    followUpTimeframe: parsed.follow_up_timeframe,
     notes: parsed.notes,
     source: 'openai',
   };

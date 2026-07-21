@@ -1,5 +1,6 @@
 import { timingSafeEqual } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyRequest } from 'fastify';
+import { getClient, loadClients } from './core/clients.js';
 import { getConfig } from './core/config.js';
 import { processWebhook } from './core/pipeline.js';
 import { InstantlyWebhookSchema } from './core/types.js';
@@ -25,15 +26,27 @@ function isAuthorized(request: FastifyRequest): boolean {
 
 export function buildServer(): FastifyInstance {
   const config = getConfig();
+  // Fail fast on malformed client config instead of at first webhook.
+  const clients = loadClients();
+
   const app = Fastify({ logger: { level: config.LOG_LEVEL } });
 
-  app.get('/health', async () => ({ status: 'ok', uptime: process.uptime() }));
+  app.get('/health', async () => ({
+    status: 'ok',
+    uptime: process.uptime(),
+    clients: [...clients.keys()],
+  }));
 
-  app.post('/webhooks/instantly', async (request, reply) => {
+  // One webhook URL per Instantly workspace/campaign: /webhooks/instantly/<slug>.
+  // The slug picks the client profile (calendar, pitch, Discord channel, API key).
+  app.post('/webhooks/instantly/:slug', async (request, reply) => {
     if (!isAuthorized(request)) {
       request.log.warn({ ip: request.ip }, 'rejected webhook with bad secret');
       return reply.code(401).send({ error: 'unauthorized' });
     }
+
+    const { slug } = request.params as { slug: string };
+    const client = getClient(slug) ?? null;
 
     const parsed = InstantlyWebhookSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -43,11 +56,12 @@ export function buildServer(): FastifyInstance {
     }
 
     // Instantly retries on non-2xx. Ack immediately and process out of band so a
-    // slow OpenAI call can't cause a duplicate delivery.
+    // slow OpenAI call can't cause a duplicate delivery. Unknown slugs are still
+    // accepted — they classify and alert as "unconfigured" rather than vanish.
     reply.code(202).send({ status: 'accepted' });
 
     try {
-      await processWebhook(parsed.data);
+      await processWebhook(parsed.data, client, slug);
     } catch (error) {
       request.log.error({ err: error }, 'pipeline failed');
     }

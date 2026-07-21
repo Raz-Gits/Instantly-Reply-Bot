@@ -79,6 +79,8 @@ export function classifyByRules(replyText: string): Classification | null {
       confidence: 1,
       reasoning: 'Empty reply body — nothing to classify.',
       isComplexNegative: false,
+      flags: [],
+      followUpTimeframe: '',
       notes: '',
       source: 'rules',
     };
@@ -100,6 +102,8 @@ export function classifyByRules(replyText: string): Classification | null {
       confidence: 0.99,
       reasoning: `Reply is exactly the opt-out phrase "${canonical}".`,
       isComplexNegative: false,
+      flags: [],
+      followUpTimeframe: '',
       notes: '',
       source: 'rules',
     };

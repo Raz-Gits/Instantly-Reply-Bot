@@ -23,6 +23,8 @@ export async function classifyReply(event: ReplyEvent): Promise<Classification> 
       confidence: 0,
       reasoning: `Classification failed, escalating to a human: ${message}`,
       isComplexNegative: false,
+      flags: [],
+      followUpTimeframe: '',
       notes: '',
       source: 'openai',
     };

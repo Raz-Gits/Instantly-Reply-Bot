@@ -1,17 +1,39 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { setClientsForTesting, type ClientProfile } from '../src/core/clients.js';
 import { setConfigForTesting } from '../src/core/config.js';
 import { decide } from '../src/core/decide.js';
 import { normalizeEvent } from '../src/core/normalize.js';
-import type { Classification, Intent, Sentiment } from '../src/core/types.js';
+import { getClient } from '../src/core/clients.js';
+import type { Classification, EscalationFlag, Intent, Sentiment } from '../src/core/types.js';
 
 beforeAll(() => {
-  setConfigForTesting({
-    CONFIDENCE_THRESHOLD: 0.7,
-    SENDER_NAME: 'Raz',
-    SENDER_COMPANY: 'Acme',
-    CALENDAR_LINK: 'https://cal.com/raz',
+  setConfigForTesting({ CONFIDENCE_THRESHOLD: 0.7 });
+  setClientsForTesting({
+    acme: {
+      clientName: 'Acme Corp',
+      senderName: 'Jane',
+      companyName: 'Acme Corp',
+      calendarLink: 'https://calendly.com/jane-acme/intro',
+      whatWeDo: 'Acme builds invoicing tools for freight brokers.',
+      pricingInfo: 'You only pay per qualified meeting delivered.',
+      differentiator: 'Our model is pay-per-meeting with no retainer.',
+    },
+    // A sparse client: no pricing text, book_call disabled, custom copy for what_we_do.
+    sparse: {
+      clientName: 'Sparse LLC',
+      senderName: 'Sam',
+      calendarLink: 'https://cal.com/sam',
+      whatWeDo: 'Sparse does things.',
+      disabledTemplates: ['book_call'],
+      templateOverrides: {
+        what_we_do: { body: 'CUSTOM COPY {{calendarLink}} - {{senderName}}' },
+      },
+    },
   });
 });
+
+const acme = () => getClient('acme') as ClientProfile;
+const sparse = () => getClient('sparse') as ClientProfile;
 
 function event(replyText: string, overrides: Record<string, string> = {}) {
   return normalizeEvent({
@@ -26,91 +48,209 @@ function event(replyText: string, overrides: Record<string, string> = {}) {
   });
 }
 
-function classification(
-  intent: Intent,
-  opts: Partial<Classification> = {},
-): Classification {
+function classification(intent: Intent, opts: Partial<Classification> = {}): Classification {
   return {
     intent,
     sentiment: (opts.sentiment ?? 'neutral') as Sentiment,
     confidence: opts.confidence ?? 0.95,
     reasoning: opts.reasoning ?? 'test',
     isComplexNegative: opts.isComplexNegative ?? false,
+    flags: opts.flags ?? [],
+    followUpTimeframe: opts.followUpTimeframe ?? '',
     notes: opts.notes ?? '',
     source: opts.source ?? 'openai',
   };
 }
 
-describe('decide', () => {
-  it('ignores bare unsubscribes', () => {
-    const d = decide(event('unsubscribe'), classification('unsubscribe'));
+describe('decide — ignore & unsubscribe', () => {
+  it('ignores bare unsubscribes and marks the lead for unsubscription', () => {
+    const d = decide(event('unsubscribe'), classification('unsubscribe'), acme());
     expect(d.action).toBe('ignore');
+    expect(d.unsubscribeLead).toBe(true);
   });
 
-  it('ignores out-of-office and auto-replies', () => {
-    expect(decide(event('OOO until Monday'), classification('out_of_office')).action).toBe('ignore');
-    expect(decide(event('Ticket #4 created'), classification('auto_reply')).action).toBe('ignore');
-  });
-
-  it('ignores a simple decline', () => {
-    const d = decide(event('not interested'), classification('not_interested'));
+  it('ignores simple declines and also marks them for unsubscription', () => {
+    const d = decide(event('not interested'), classification('not_interested'), acme());
     expect(d.action).toBe('ignore');
+    expect(d.unsubscribeLead).toBe(true);
   });
 
-  it('alerts on a complex negative even when the intent is an opt-out', () => {
+  it('ignores OOO/auto-replies without unsubscribing', () => {
+    const d = decide(event('OOO until Monday'), classification('out_of_office'), acme());
+    expect(d.action).toBe('ignore');
+    expect(d.unsubscribeLead).toBe(false);
+  });
+
+  it('alerts on a complex negative but still unsubscribes an angry opt-out', () => {
     const d = decide(
-      event('Remove me. Also this is the third time you people have emailed me and it is unacceptable.'),
+      event('Remove me. Third time you people have emailed me. Unacceptable.'),
       classification('unsubscribe', { isComplexNegative: true, sentiment: 'negative' }),
+      acme(),
     );
     expect(d.action).toBe('alert');
+    expect(d.unsubscribeLead).toBe(true);
+  });
+});
+
+describe('decide — deterministic playbook guards', () => {
+  it('alerts on replies over 150 words even when intent is draftable', () => {
+    const long = Array(160).fill('word').join(' ');
+    const d = decide(event(long), classification('interested'), acme());
+    expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/long/i);
   });
 
-  it('alerts on objections rather than auto-answering', () => {
+  it('alerts on more than 2 questions', () => {
     const d = decide(
-      event('We already use a competitor and are locked in for a year.'),
-      classification('objection', { sentiment: 'negative' }),
+      event('What do you do? How much is it? Who have you worked with?'),
+      classification('info_request'),
+      acme(),
     );
     expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/questions/i);
   });
 
-  it('drafts from a template on a meeting request', () => {
-    const d = decide(event('Sure, can we do Thursday?'), classification('meeting_request'));
+  it('counts "??" as one question, not two', () => {
+    const d = decide(event('Really?? How does it work?'), classification('info_request'), acme());
     expect(d.action).toBe('draft');
-    expect(d.templateId).toBe('meeting_request');
-    expect(d.draft?.body).toContain('Hi Jane,');
-    expect(d.draft?.body).toContain('https://cal.com/raz');
-    expect(d.draft?.body).not.toMatch(/\{\{/);
+  });
+});
+
+describe('decide — escalation flags & always-alert intents', () => {
+  it.each<EscalationFlag>([
+    'named_competitor',
+    'referral_mention',
+    'existing_relationship',
+    'legal_or_contract',
+    'negotiation_terms',
+    'technical_deep_dive',
+    'press_media',
+    'sensitive_info',
+  ])('flag %s forces an alert even on a positive intent', (flag) => {
+    const d = decide(event('sounds good'), classification('interested', { flags: [flag] }), acme());
+    expect(d.action).toBe('alert');
+    expect(d.reason).toContain(flag);
   });
 
-  it('alerts when a positive intent has no matching template', () => {
+  it('alerts on referrals in both directions (no auto-draft)', () => {
     const d = decide(
-      event('How does your onboarding handle SOC2?'),
-      classification('info_request', { sentiment: 'positive' }),
+      event('Talk to our CMO, jane@corp.com'),
+      classification('referral', { notes: 'CMO jane@corp.com' }),
+      acme(),
     );
+    expect(d.action).toBe('alert');
+  });
+
+  it('alerts on objections', () => {
+    const d = decide(
+      event('No budget this year.'),
+      classification('objection', { sentiment: 'negative' }),
+      acme(),
+    );
+    expect(d.action).toBe('alert');
+  });
+
+  it('alerts when confidence is below threshold', () => {
+    const d = decide(event('maybe?'), classification('interested', { confidence: 0.4 }), acme());
+    expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/confidence/i);
+  });
+});
+
+describe('decide — drafting', () => {
+  it('drafts book_call for interested and meeting_request', () => {
+    for (const intent of ['interested', 'meeting_request'] as const) {
+      const d = decide(event('Sure, sounds good'), classification(intent), acme());
+      expect(d.action).toBe('draft');
+      expect(d.templateId).toBe('book_call');
+      expect(d.draft?.body).toContain('https://calendly.com/jane-acme/intro');
+      expect(d.draft?.body).toContain('Jane');
+      expect(d.draft?.body).not.toMatch(/\{\{/);
+    }
+  });
+
+  it('drafts what_we_do with the client pitch for info requests', () => {
+    const d = decide(event('What exactly do you do?'), classification('info_request'), acme());
+    expect(d.action).toBe('draft');
+    expect(d.draft?.body).toContain('Acme builds invoicing tools');
+  });
+
+  it('drafts pricing with the client pricing text', () => {
+    const d = decide(event('How much does it cost?'), classification('pricing_request'), acme());
+    expect(d.action).toBe('draft');
+    expect(d.draft?.body).toContain('pay per qualified meeting');
+  });
+
+  it('drafts existing_provider with the differentiator when no competitor is named', () => {
+    const d = decide(
+      event('We already have an agency for this.'),
+      classification('existing_provider'),
+      acme(),
+    );
+    expect(d.action).toBe('draft');
+    expect(d.draft?.body).toContain('pay-per-meeting');
+  });
+
+  it('alerts instead when a competitor is named on existing_provider', () => {
+    const d = decide(
+      event('We already use Belkins.'),
+      classification('existing_provider', { flags: ['named_competitor'] }),
+      acme(),
+    );
+    expect(d.action).toBe('alert');
+  });
+
+  it('injects the follow-up timeframe into follow_up_later drafts', () => {
+    const d = decide(
+      event('Try me again in Q4.'),
+      classification('not_now_follow_up_later', { followUpTimeframe: 'in Q4' }),
+      acme(),
+    );
+    expect(d.action).toBe('draft');
+    expect(d.draft?.body).toContain('follow up with you in Q4');
+  });
+
+  it('falls back to a soft phrase when no timeframe was given', () => {
+    const d = decide(
+      event('Not right now, busy.'),
+      classification('not_now_follow_up_later'),
+      acme(),
+    );
+    expect(d.action).toBe('draft');
+    expect(d.draft?.body).toContain('a little further down the line');
+  });
+
+  it('falls back to "Hi there" style greeting when firstName is missing', () => {
+    const d = decide(
+      normalizeEvent({ lead_email: 'x@y.com', reply_text: 'what do you guys do', reply_subject: 'Hi' }),
+      classification('info_request'),
+      acme(),
+    );
+    expect(d.action).toBe('draft');
+  });
+});
+
+describe('decide — per-client config', () => {
+  it('alerts when the client left a needed profile field blank', () => {
+    const d = decide(event('How much?'), classification('pricing_request'), sparse());
+    expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/pricingInfo/);
+  });
+
+  it('alerts when the client disabled the matching template', () => {
+    const d = decide(event('sure!'), classification('interested'), sparse());
     expect(d.action).toBe('alert');
     expect(d.reason).toMatch(/No reply template/);
   });
 
-  it('alerts when confidence is below threshold', () => {
-    const d = decide(event('maybe?'), classification('interested', { confidence: 0.4 }));
-    expect(d.action).toBe('alert');
-    expect(d.reason).toMatch(/confidence/i);
-  });
-
-  it('falls back to a friendly greeting when firstName is missing', () => {
-    const d = decide(
-      normalizeEvent({ lead_email: 'x@y.com', reply_text: 'yes please', reply_subject: 'Hi' }),
-      classification('interested'),
-    );
+  it('uses per-client template override copy', () => {
+    const d = decide(event('what do you do?'), classification('info_request'), sparse());
     expect(d.action).toBe('draft');
-    expect(d.draft?.body).toContain('Hi there,');
+    expect(d.draft?.body).toBe('CUSTOM COPY https://cal.com/sam - Sam');
   });
 
-  it('alerts instead of drafting when a hard variable is unset', () => {
-    setConfigForTesting({ CALENDAR_LINK: '' });
-    const d = decide(event('Can we book a call?'), classification('meeting_request'));
+  it('alerts on intents with no template (proof stays covered, unclear does not)', () => {
+    const d = decide(event('hmm'), classification('unclear'), acme());
     expect(d.action).toBe('alert');
-    expect(d.reason).toMatch(/calendarLink/);
-    setConfigForTesting({ CALENDAR_LINK: 'https://cal.com/raz' });
   });
 });

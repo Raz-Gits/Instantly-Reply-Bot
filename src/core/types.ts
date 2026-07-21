@@ -67,13 +67,17 @@ export interface ReplyEvent {
 
 /**
  * Intents are the contract between the classifier and the template registry.
- * Adding a value here means adding a template or an explicit ignore rule.
+ * Adding a value here means adding a template or an explicit routing rule in
+ * decide() — there is no silent third path.
  */
 export const INTENTS = [
   'interested',
   'meeting_request',
   'pricing_request',
   'info_request',
+  'proof_request',
+  'how_did_you_find_us',
+  'existing_provider',
   'referral',
   'wrong_person',
   'not_now_follow_up_later',
@@ -90,6 +94,24 @@ export type Intent = (typeof INTENTS)[number];
 export const SENTIMENTS = ['positive', 'neutral', 'negative'] as const;
 export type Sentiment = (typeof SENTIMENTS)[number];
 
+/**
+ * Signals that force human handling regardless of intent. These map 1:1 to the
+ * playbook's human-intervention triggers that the model can detect (length and
+ * question-count are counted deterministically in decide() instead).
+ */
+export const ESCALATION_FLAGS = [
+  'named_competitor',
+  'referral_mention',
+  'existing_relationship',
+  'legal_or_contract',
+  'negotiation_terms',
+  'technical_deep_dive',
+  'press_media',
+  'sensitive_info',
+] as const;
+
+export type EscalationFlag = (typeof ESCALATION_FLAGS)[number];
+
 export interface Classification {
   intent: Intent;
   sentiment: Sentiment;
@@ -99,6 +121,14 @@ export interface Classification {
   reasoning: string;
   /** True when a negative reply carries more than a bare "no"/"stop". */
   isComplexNegative: boolean;
+  /** Any of these present ⇒ the reply always goes to a human. */
+  flags: EscalationFlag[];
+  /**
+   * For not_now_follow_up_later: the timing phrase with preposition, ready to
+   * drop into a sentence — "in Q4", "in January", "in a few weeks". Empty
+   * when the prospect gave none.
+   */
+  followUpTimeframe: string;
   /** Free-text detail worth carrying into a template or alert. */
   notes: string;
   source: 'rules' | 'openai';
@@ -110,6 +140,8 @@ export interface Decision {
   action: ActionKind;
   reason: string;
   classification: Classification;
+  /** True when the lead should be marked unsubscribed in Instantly. */
+  unsubscribeLead: boolean;
   templateId?: string;
   draft?: RenderedDraft;
 }

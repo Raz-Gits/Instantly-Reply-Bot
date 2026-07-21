@@ -1,0 +1,30 @@
+{
+  "raz": {
+    "clientName": "Raz (my own campaigns)",
+    "senderName": "Raz",
+    "companyName": "Your Company",
+    "calendarLink": "https://cal.com/your-handle",
+    "whatWeDo": "We help B2B companies book qualified sales meetings through targeted outbound campaigns.",
+    "pricingInfo": "Our model is performance based, which means you only pay for qualified meetings we actually deliver — no monthly retainer and no upfront commitment beyond the initial setup.",
+    "differentiator": "What I would say is that our model is different in one key way — you only pay when we deliver qualified meetings. There is no monthly retainer or upfront commitment beyond the initial setup.",
+    "discordWebhookUrl": "https://discord.com/api/webhooks/CHANNEL_FOR_RAZ/token",
+    "instantlyApiKeyEnv": "INSTANTLY_API_KEY_RAZ"
+  },
+  "acme": {
+    "clientName": "Acme Corp",
+    "senderName": "Jane",
+    "companyName": "Acme Corp",
+    "calendarLink": "https://calendly.com/jane-acme/intro",
+    "whatWeDo": "Acme builds automated invoicing tools for freight brokers.",
+    "pricingInfo": "",
+    "differentiator": "",
+    "discordWebhookUrl": "https://discord.com/api/webhooks/CHANNEL_FOR_ACME/token",
+    "instantlyApiKeyEnv": "INSTANTLY_API_KEY_ACME",
+    "disabledTemplates": ["existing_provider"],
+    "templateOverrides": {
+      "book_call": {
+        "body": "Great to hear!\n\nGrab any time that suits you here: {{calendarLink}}\n\nSpeak soon,\n{{senderName}}"
+      }
+    }
+  }
+}

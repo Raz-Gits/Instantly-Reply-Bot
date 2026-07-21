@@ -12,19 +12,17 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1),
   OPENAI_MODEL: z.string().default('gpt-4o-mini'),
 
+  /**
+   * Catch-all Discord channel. Per-client sub-channels are configured in
+   * clients.json (discordWebhookUrl); this one receives posts for clients
+   * without their own channel and alerts for unconfigured webhook slugs.
+   */
   DISCORD_WEBHOOK_URL: z.string().url(),
 
-  /** Optional until you wire up sending/lead-enrichment. */
-  INSTANTLY_API_KEY: z.string().optional(),
   INSTANTLY_API_BASE: z.string().url().default('https://api.instantly.ai/api/v2'),
 
   /** Below this classifier confidence we alert a human instead of drafting. */
   CONFIDENCE_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
-
-  /** Your name/company, injected into template variables. */
-  SENDER_NAME: z.string().default('the team'),
-  SENDER_COMPANY: z.string().default(''),
-  CALENDAR_LINK: z.string().default(''),
 });
 
 export type Config = z.infer<typeof EnvSchema>;

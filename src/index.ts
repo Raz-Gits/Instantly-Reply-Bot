@@ -13,7 +13,9 @@ async function main(): Promise<void> {
   }
 
   await app.listen({ port: config.PORT, host: config.HOST });
-  app.log.info(`webhook endpoint: POST http://${config.HOST}:${config.PORT}/webhooks/instantly`);
+  app.log.info(
+    `webhook endpoints: POST http://${config.HOST}:${config.PORT}/webhooks/instantly/<client-slug>`,
+  );
 }
 
 main().catch((error) => {
