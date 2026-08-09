@@ -8,3 +8,10 @@ coverage/
 
 # Per-client config with Discord webhook URLs - keep out of git
 config/clients.json
+.env.*
+!.env.example
+!*.env.sops
+!.env.*.sops
+.venv/
+__pycache__/
+*.bak-devsync
