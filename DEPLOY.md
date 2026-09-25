@@ -1,6 +1,6 @@
 # Deploying to production (Railway)
 
-Everything below uses placeholders — nothing in this file is a real credential.
+Everything below uses placeholders. Nothing in this file is a real credential.
 Time to first live webhook: about an hour.
 
 ## 1. Create the Railway service
@@ -32,13 +32,19 @@ not at the first webhook.
 {
   "raz": {
     "clientName": "<Your campaign name>",
-    "calendarUrl": "https://cal.com/<you>/<event>",
-    "pitchSummary": "<one sentence describing the offer, used in drafts>",
+    "senderName": "<Your first name>",
+    "calendarLink": "https://cal.com/<you>/<event>",
+    "whatWeDo": "<one sentence describing the offer, used in drafts>",
     "discordWebhookUrl": "https://discord.com/api/webhooks/<id>/<token>",
     "instantlyApiKeyEnv": "INSTANTLY_API_KEY_RAZ"
   }
 }
 ```
+
+`clientName`, `senderName` and `calendarLink` are required. Every other field,
+including pricing copy and per-template overrides, is shown in
+[config/clients.example.json](config/clients.example.json). Profiles are
+validated when they load, and a missing or malformed field fails with its name.
 
 ## 3. Point Instantly at it
 
@@ -63,7 +69,7 @@ curl -s -o /dev/null -w "%{http_code}" -X POST \
   -H 'content-type: application/json' -d '{}'
 # -> 401
 
-# 3. Full pipeline, no Instantly needed — replay a reply locally:
+# 3. Full pipeline with no Instantly needed, replaying a reply locally:
 npx tsx scripts/replay.ts --client raz "Sounds interesting - can we talk Thursday?"
 # (or send yourself a campaign email and reply to it, then watch Discord)
 ```
@@ -75,7 +81,7 @@ seconds. That reply → Discord round-trip is the demo.
 ## 5. Operational notes
 
 - **Duplicates:** redeliveries inside a 6-hour window are acked (`202
-  duplicate`) and dropped — in-memory ledger, capped at 2,000 entries
+  duplicate`) and dropped. The ledger is in memory, capped at 2,000 entries
   (`src/core/dedupe.ts`). A restart forgets the ledger; the worst case is a
   repeated Discord post, never a lost reply.
 - **Pipeline failures page a human:** any error after the ack posts a 🚨 to the
