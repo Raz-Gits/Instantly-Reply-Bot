@@ -118,6 +118,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  // The public version never sends email. Every test in this file checks it.
+  expect(sendReply).not.toHaveBeenCalled();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -219,5 +221,57 @@ describe('opt-out wording through the whole pipeline', () => {
     expect(vi.mocked(notifyDiscord).mock.calls[0]![1].action).toBe('alert');
     expect(markLeadUnsubscribed).not.toHaveBeenCalled();
     expect(sendReply).not.toHaveBeenCalled();
+  });
+});
+
+describe('side effects on each path', () => {
+  it('posts a draft to Discord and never sends it', async () => {
+    stubModel('meeting_request');
+
+    const result = await processWebhook(
+      payload('Sounds good, can we talk Thursday?'),
+      acme(),
+      'acme',
+    );
+
+    expect(result.decision.action).toBe('draft');
+    expect(result.decision.draft?.body).toContain('https://cal.com/jane-acme');
+    expect(notifyDiscord).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyDiscord).mock.calls[0]![1].action).toBe('draft');
+    expect(sendReply).not.toHaveBeenCalled();
+    expect(markLeadUnsubscribed).not.toHaveBeenCalled();
+    expect(result.unsubscribe).toBe('not_requested');
+    expect(summaryLine()).toMatchObject({ action: 'draft', unsubscribe: 'not_requested' });
+  });
+
+  it('posts nothing for an ignored out-of-office reply', async () => {
+    stubModel('out_of_office');
+
+    const result = await processWebhook(payload('Out of office until Monday.'), acme(), 'acme');
+
+    expect(result.decision.action).toBe('ignore');
+    expect(result.notified).toBe(false);
+    expect(notifyDiscord).not.toHaveBeenCalled();
+    expect(notifyDiscordText).not.toHaveBeenCalled();
+    expect(markLeadUnsubscribed).not.toHaveBeenCalled();
+  });
+
+  it('alerts for an unknown slug and never calls Instantly, even for an opt-out', async () => {
+    const result = await processWebhook(payload('unsubscribe'), null, 'nobody');
+
+    expect(result.decision.action).toBe('alert');
+    expect(result.decision.reason).toContain('"nobody"');
+    expect(markLeadUnsubscribed).not.toHaveBeenCalled();
+    expect(notifyDiscord).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyDiscord).mock.calls[0]![2]).toBeNull();
+  });
+
+  it('alerts when the model call fails, instead of losing the reply', async () => {
+    // The default stub in beforeEach throws, like an OpenAI outage.
+    const result = await processWebhook(payload('Tell me more about this.'), acme(), 'acme');
+
+    expect(result.decision.action).toBe('alert');
+    expect(result.decision.classification.intent).toBe('unclear');
+    expect(notifyDiscord).toHaveBeenCalledTimes(1);
   });
 });

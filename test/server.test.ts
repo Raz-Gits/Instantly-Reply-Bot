@@ -15,6 +15,7 @@ import { setClientsForTesting } from '../src/core/clients.js';
 import { setConfigForTesting } from '../src/core/config.js';
 import { resetDedupeForTesting } from '../src/core/dedupe.js';
 import { processWebhook } from '../src/core/pipeline.js';
+import { notifyDiscordText } from '../src/integrations/discord.js';
 import { buildServer } from '../src/server.js';
 
 const SECRET = 'test-secret-9f3a1c7e5b2d';
@@ -56,6 +57,7 @@ beforeAll(() => {
 beforeEach(() => {
   resetDedupeForTesting();
   vi.mocked(processWebhook).mockClear();
+  vi.mocked(notifyDiscordText).mockClear();
   logLines = [];
   app = buildServer({ logStream: { write: (line: string) => logLines.push(line) } });
 });
@@ -159,5 +161,83 @@ describe('/health', () => {
     expect(res.json()).toMatchObject({ status: 'ok', clientCount: 2 });
     expect(res.body).not.toContain('acme');
     expect(res.body).not.toContain('beta');
+  });
+});
+
+describe('webhook endpoint', () => {
+  const post = (url: string, payload: unknown, secret: string | null = SECRET) =>
+    app.inject({
+      method: 'POST',
+      url,
+      headers: secret === null ? {} : { 'x-webhook-secret': secret },
+      payload: payload as Record<string, unknown>,
+    });
+
+  it('rejects a request with no secret with 401 and does not process it', async () => {
+    const res = await post('/webhooks/instantly/acme', replyPayload, null);
+    expect(res.statusCode).toBe(401);
+    expect(processWebhook).not.toHaveBeenCalled();
+  });
+
+  it('rejects a wrong header secret with 401 and does not process it', async () => {
+    const res = await post('/webhooks/instantly/acme', replyPayload, WRONG_SECRET);
+    expect(res.statusCode).toBe(401);
+    expect(processWebhook).not.toHaveBeenCalled();
+  });
+
+  it('rejects a malformed payload with 400 and does not process it', async () => {
+    const res = await post('/webhooks/instantly/acme', { ...replyPayload, lead_email: 42 });
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: 'invalid payload' });
+    expect(processWebhook).not.toHaveBeenCalled();
+  });
+
+  it('acknowledges a reply with 202 and hands it to the pipeline with its client', async () => {
+    const res = await post('/webhooks/instantly/acme', replyPayload);
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ status: 'accepted' });
+    await vi.waitFor(() => expect(processWebhook).toHaveBeenCalledTimes(1));
+    const [payload, client, slug] = vi.mocked(processWebhook).mock.calls[0]!;
+    expect(payload).toMatchObject(replyPayload);
+    expect(client?.slug).toBe('acme');
+    expect(slug).toBe('acme');
+  });
+
+  it('acknowledges a repeat delivery as a duplicate and processes it only once', async () => {
+    const first = await post('/webhooks/instantly/acme', replyPayload);
+    const second = await post('/webhooks/instantly/acme', replyPayload);
+
+    expect(first.json()).toEqual({ status: 'accepted' });
+    expect(second.statusCode).toBe(202);
+    expect(second.json()).toEqual({ status: 'duplicate' });
+    await vi.waitFor(() => expect(processWebhook).toHaveBeenCalledTimes(1));
+    // Give a wrongly processed duplicate the chance to show up.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(processWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it('accepts an unknown slug but passes no client, so it can only alert', async () => {
+    const res = await post('/webhooks/instantly/nobody', replyPayload);
+
+    expect(res.statusCode).toBe(202);
+    await vi.waitFor(() => expect(processWebhook).toHaveBeenCalledTimes(1));
+    const [, client, slug] = vi.mocked(processWebhook).mock.calls[0]!;
+    expect(client).toBeNull();
+    expect(slug).toBe('nobody');
+  });
+
+  it('posts a Discord alert when the pipeline throws after the 202', async () => {
+    vi.mocked(processWebhook).mockRejectedValueOnce(new Error('boom'));
+
+    const res = await post('/webhooks/instantly/acme', replyPayload);
+
+    expect(res.statusCode).toBe(202);
+    await vi.waitFor(() => expect(notifyDiscordText).toHaveBeenCalledTimes(1));
+    const [message, client] = vi.mocked(notifyDiscordText).mock.calls[0]!;
+    expect(message).toContain('Reply pipeline failed');
+    expect(message).toContain('lead@prospect.example');
+    expect(message).toContain('boom');
+    expect(client?.slug).toBe('acme');
   });
 });
