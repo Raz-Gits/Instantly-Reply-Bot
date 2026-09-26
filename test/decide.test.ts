@@ -340,3 +340,30 @@ describe('decide: opt-out wording never depends on the model', () => {
     expect(findOptOutLanguage('Could not stop thinking about your email. Let us talk.')).toBeNull();
   });
 });
+
+describe('decide: negated "stop" wording is not an opt-out', () => {
+  it.each([
+    "Please don't stop emailing me, this is useful.",
+    'Do not stop sending updates.',
+    'Please don’t stop emailing me.',
+    'Dont stop sending these, sounds good.',
+    'Never stop writing like this. Sounds good.',
+  ])('drafts %j as before', (text) => {
+    expect(findOptOutLanguage(text)).toBeNull();
+    const d = decide(event(text), classification('interested', { sentiment: 'positive' }), acme());
+    expect(d.action).toBe('draft');
+  });
+
+  it.each([
+    'Please stop emailing me.',
+    'Stop sending these.',
+    // A negation elsewhere doesn't cancel a plain "stop" later on.
+    "Don't stop emailing me. Just kidding, stop emailing me.",
+    // Not right before "stop", so it stays ambiguous and alerts.
+    "Please don't ever stop emailing me.",
+  ])('still alerts on %j', (text) => {
+    const d = decide(event(text), classification('interested', { confidence: 0.99 }), acme());
+    expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/opt-out language detected/i);
+  });
+});

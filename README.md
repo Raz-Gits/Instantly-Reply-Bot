@@ -36,7 +36,7 @@ Each stage lives in its own module: [normalize.ts](src/core/normalize.ts), [clas
 
 ## Routing rules (in evaluation order)
 
-1. **Opt-out wording, checked in code**: a reply containing "stop contacting/emailing", "remove me/us", "unsubscribe", "do not contact", "take me off" or "opt out" (English, case-insensitive) can never be drafted or silently dropped, whatever the model says. If the model also read it as an opt-out, rule 2 applies. Otherwise it alerts, and a person decides whether to unsubscribe; the pattern alone never does.
+1. **Opt-out wording, checked in code**: a reply containing "stop contacting/emailing", "remove me/us", "unsubscribe", "do not contact", "take me off" or "opt out" (English, case-insensitive) can never be drafted or silently dropped, whatever the model says. A "stop ..." right after "don't", "do not" or "never" doesn't count, since it asks for the opposite. If the model also read it as an opt-out, rule 2 applies. Otherwise it alerts, and a person decides whether to unsubscribe; the pattern alone never does.
 2. **Ignore + unsubscribe**: bare `unsubscribe` / `not_interested` replies are dropped and the lead is added to that workspace's block list via the Instantly API. OOO and auto-replies are dropped without the API call.
 3. **Complex negatives alert**: any negative reply with substance (a reason, a complaint, anger), even an angry unsubscribe, which *also* still gets the unsubscribe API call.
 4. **Deterministic guards** (from the reply playbook): more than 150 words / 900 characters, or more than 2 questions → alert. Counted in code, not judged by the model.

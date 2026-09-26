@@ -50,7 +50,10 @@ function countQuestions(text: string): number {
  * a person instead of a draft. English only.
  */
 const OPT_OUT_PATTERNS: readonly RegExp[] = [
-  /\bstop (contacting|e-?mailing|mailing|messaging|reaching out|sending|writing)\b/i,
+  // "stop emailing", but not "don't stop emailing" or "never stop sending",
+  // which ask for the opposite. Only a negation right before "stop" counts;
+  // anything looser still alerts.
+  /(?<!\b(?:do\s+not|don['’]?t|never)\s+)\bstop (contacting|e-?mailing|mailing|messaging|reaching out|sending|writing)\b/i,
   /\bremove (me|us|my email|my address|our email|our address)\b/i,
   /\bunsubscrib/i, // unsubscribe, unsubscribed, unsubscribing
   /\b(do not|don['’]?t) (contact|e-?mail|message|write to|reach out)\b/i,
