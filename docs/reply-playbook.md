@@ -110,7 +110,7 @@ Also ignored (but **not** unsubscribed — they may still convert later):
 ### 6. "Reach out later"
 **They say:** "Try me in Q4" · "Check back in January" · "We're too busy right now" · "Ask me again in a few weeks"
 
-The bot picks up the actual timeframe they gave and echoes it back:
+This one comes to Discord as an alert, not a draft: the reply promises a follow-up, and the bot can't schedule one. A person sets the reminder, then sends the text below. The bot picks up the actual timeframe they gave and echoes it back:
 
 > Completely understand, timing is everything.
 >

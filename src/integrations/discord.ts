@@ -51,13 +51,17 @@ function buildEmbed(event: ReplyEvent, decision: Decision, client: ClientProfile
     fields.push({ name: 'Notes', value: truncate(classification.notes, 1024) });
   }
 
-  if (isDraft && draft) {
-    fields.push({
-      name: `Suggested reply — template \`${draft.templateId}\``,
-      value: codeBlock(draft.body, 1024),
-    });
-  } else {
+  if (!isDraft) {
     fields.push({ name: 'Action needed', value: truncate(decision.reason, 1024) });
+  }
+
+  // A draft, or on an alert the text to send once the action above is done.
+  const suggested = isDraft ? draft : decision.suggestedReply;
+  if (suggested) {
+    fields.push({
+      name: `Suggested reply (template \`${suggested.templateId}\`)`,
+      value: codeBlock(suggested.body, 1024),
+    });
   }
 
   if (event.uniboxUrl) {

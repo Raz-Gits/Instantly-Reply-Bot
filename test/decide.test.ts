@@ -200,14 +200,27 @@ describe('decide — drafting', () => {
     expect(d.action).toBe('alert');
   });
 
-  it('injects the follow-up timeframe into follow_up_later drafts', () => {
+  it('alerts on follow-up-later, since nothing schedules the follow-up it promises', () => {
     const d = decide(
       event('Try me again in Q4.'),
       classification('not_now_follow_up_later', { followUpTimeframe: 'in Q4' }),
       acme(),
     );
-    expect(d.action).toBe('draft');
-    expect(d.draft?.body).toContain('follow up with you in Q4');
+    expect(d.action).toBe('alert');
+    expect(d.draft).toBeUndefined();
+    expect(d.reason).toMatch(/set a reminder/i);
+    expect(d.reason).toContain('in Q4');
+    expect(d.templateId).toBe('follow_up_later');
+  });
+
+  it('puts the follow-up timeframe into the suggested reply', () => {
+    const d = decide(
+      event('Try me again in Q4.'),
+      classification('not_now_follow_up_later', { followUpTimeframe: 'in Q4' }),
+      acme(),
+    );
+    expect(d.suggestedReply?.body).toContain('follow up with you in Q4');
+    expect(d.suggestedReply?.body).not.toMatch(/\{\{/);
   });
 
   it('falls back to a soft phrase when no timeframe was given', () => {
@@ -216,8 +229,18 @@ describe('decide — drafting', () => {
       classification('not_now_follow_up_later'),
       acme(),
     );
-    expect(d.action).toBe('draft');
-    expect(d.draft?.body).toContain('a little further down the line');
+    expect(d.action).toBe('alert');
+    expect(d.suggestedReply?.body).toContain('a little further down the line');
+  });
+
+  it('still lets a flag on a follow-up-later reply win, with its own reason', () => {
+    const d = decide(
+      event('Ask me again in Q4, we just signed with Belkins.'),
+      classification('not_now_follow_up_later', { flags: ['named_competitor'] }),
+      acme(),
+    );
+    expect(d.action).toBe('alert');
+    expect(d.reason).toContain('named_competitor');
   });
 
   it('falls back to "Hi there" style greeting when firstName is missing', () => {

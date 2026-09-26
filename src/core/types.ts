@@ -143,7 +143,13 @@ export interface Decision {
   /** True when the lead should be marked unsubscribed in Instantly. */
   unsubscribeLead: boolean;
   templateId?: string;
+  /** Set only when action is "draft". */
   draft?: RenderedDraft;
+  /**
+   * On an alert: text a person can send after doing what the alert asks.
+   * Kept apart from `draft` so nothing that acts on drafts can pick it up.
+   */
+  suggestedReply?: RenderedDraft;
 }
 
 export interface RenderedDraft {

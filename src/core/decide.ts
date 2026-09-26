@@ -22,6 +22,13 @@ const UNSUBSCRIBE_INTENTS: ReadonlySet<Intent> = new Set(['unsubscribe', 'not_in
 /** Intents that always go to a human even though they carry no flag. */
 const ALWAYS_ALERT_INTENTS: ReadonlySet<Intent> = new Set(['referral', 'objection', 'unclear']);
 
+/**
+ * Intents whose template is only a suggestion. The follow-up template says
+ * "I will make a note to follow up", and nothing in this bot schedules one,
+ * so a person sets the reminder and then sends the text.
+ */
+const SUGGEST_ONLY_INTENTS: ReadonlySet<Intent> = new Set(['not_now_follow_up_later']);
+
 /** Playbook trigger #1: long replies always get human eyes. */
 const MAX_AUTO_WORDS = 150;
 const MAX_AUTO_CHARS = 900;
@@ -172,6 +179,16 @@ export function decide(
 
   try {
     const draft = renderTemplate(template, event, client, classification);
+    if (SUGGEST_ONLY_INTENTS.has(classification.intent)) {
+      const when = classification.followUpTimeframe || 'no date given';
+      return {
+        ...base,
+        action: 'alert',
+        reason: `Wants a follow-up later (${when}). The bot can't schedule it: set a reminder, then send the suggested reply.`,
+        templateId: template.id,
+        suggestedReply: draft,
+      };
+    }
     return {
       ...base,
       action: 'draft',

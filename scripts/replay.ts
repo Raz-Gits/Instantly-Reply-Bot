@@ -65,10 +65,12 @@ console.log(`action      ${decision.action}`);
 console.log(`unsubscribe ${decision.unsubscribeLead}`);
 console.log(`reason      ${decision.reason}`);
 
-if (decision.draft) {
-  console.log(`\n--- draft (${decision.draft.templateId}) ---`);
-  console.log(`Subject: ${decision.draft.subject}\n`);
-  console.log(decision.draft.body);
+const text = decision.draft ?? decision.suggestedReply;
+if (text) {
+  const label = decision.draft ? 'draft' : 'suggested reply, sent with the alert';
+  console.log(`\n--- ${label} (${text.templateId}) ---`);
+  console.log(`Subject: ${text.subject}\n`);
+  console.log(text.body);
 }
 
 if (!dryRun && decision.action !== 'ignore') {

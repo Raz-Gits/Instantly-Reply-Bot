@@ -6,7 +6,7 @@ Answers replies to cold email campaigns run in [Instantly.ai](https://instantly.
 | --- | --- | --- |
 | **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. Opt-outs and declines are also marked unsubscribed in that client's Instantly workspace. |
 | **draft** | Intent matches a reply template, confidence ≥ threshold, no escalation flags | Template rendered with the lead's details and the client's profile, posted to that client's Discord channel for approval. |
-| **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence | Posted to Discord with the reply, the classification, and why it needs you. |
+| **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence, requests to follow up later | Posted to Discord with the reply, the classification, and why it needs you. A follow-up-later alert also carries the reply to send once you have set the reminder. |
 
 This public version sends nothing to a prospect on its own: the bot drafts, you send. In production the defined cases went out automatically; see [Turning on auto-send](#turning-on-auto-send).
 
@@ -59,7 +59,7 @@ Defaults live in [src/templates/registry.ts](src/templates/registry.ts), copy fr
 | `proof` | proof_request | calendarLink |
 | `how_found_you` | how_did_you_find_us | none |
 | `existing_provider` | existing_provider | differentiator, calendarLink |
-| `follow_up_later` | not_now_follow_up_later | none (timeframe extracted from the reply) |
+| `follow_up_later` | not_now_follow_up_later | none (timeframe extracted from the reply). Never a draft: it promises a follow-up the bot can't schedule, so it comes as an alert with this text as the suggested reply. |
 | `wrong_person` | wrong_person | none |
 
 Placeholders: `firstName`, `lastName`, `fullName`, `companyName` (the **prospect's** company), `ourCompanyName` (the client's), `email`, `website`, `phone`, `originalSubject`, `campaignName`, `senderName`, `clientName`, `calendarLink`, `whatWeDo`, `pricingInfo`, `differentiator`, `followUpTimeframe`, plus any custom lead variable from the Instantly payload.
