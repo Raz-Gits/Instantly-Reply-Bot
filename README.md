@@ -96,7 +96,7 @@ npx tsx scripts/replay.ts --client acme --dry "how much does it cost?"
 npm test && npm run typecheck
 ```
 
-`npm test` runs 115 tests in 9 files with no network access: Instantly, Discord and OpenAI are mocked or stubbed, and `fetch` is stubbed wherever a module could reach it.
+`npm test` runs 139 tests in 11 files with no network access: Instantly, Discord and OpenAI are mocked or stubbed, and `fetch` is stubbed wherever a module could reach it.
 
 What they cover:
 

@@ -6,9 +6,7 @@
 
 > Do an adversarial review of this repository. Assume it runs in production on real prospects' inboxes, with auto-send switched on for the draft branch. Find what can go wrong: a wrong or duplicate email reaching a prospect, an opt-out not honored, the webhook accepting a forged request, secrets leaking into logs, a failure that stays silent, a path with no test. For each finding give the file and line, what can go wrong, why the code allows it, the likely impact, a concrete fix, and your confidence from 0 to 1. Start with a verdict: SHIP, FIX_THEN_SHIP or NO-SHIP. Do not modify any files. Output the full review in Markdown as your final message.
 
-Codex's text below is verbatim; only its file links were changed from local paths to repo-relative ones.
-
-The line numbers in those links are from commit `eb16c28`. The files have changed since, so on a later commit a link may not land on the line Codex meant.
+Codex's text below is verbatim; only its file links were changed from local paths to GitHub permalinks pinned to commit `eb16c28`, the commit it reviewed, so each line anchor shows the code Codex read.
 
 ---
 
@@ -45,7 +43,7 @@ The largest risks are:
 
 ### 1. Critical — The production auto-send path is not present in the reviewed source
 
-**File and line:** [src/core/pipeline.ts:32](../src/core/pipeline.ts#L32), [src/integrations/instantly.ts:100](../src/integrations/instantly.ts#L100), [README.md:117](../README.md#L117)
+**File and line:** [src/core/pipeline.ts:32](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L32), [src/integrations/instantly.ts:100](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L100), [README.md:117](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/README.md?plain=1#L117)
 
 **What can go wrong:** The code actually running in production can differ materially from the reviewed and tested repository. Its parameter mapping, error handling, send ordering, and retry behavior are unknown.
 
@@ -61,7 +59,7 @@ The largest risks are:
 
 ### 2. Critical — The webhook secret leaks into normal request logs
 
-**File and line:** [src/server.ts:21](../src/server.ts#L21), [src/server.ts:34](../src/server.ts#L34), [DEPLOY.md:49](../DEPLOY.md#L49)
+**File and line:** [src/server.ts:21](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L21), [src/server.ts:34](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L34), [DEPLOY.md:49](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/DEPLOY.md?plain=1#L49)
 
 **What can go wrong:** Anyone with access to application, proxy, platform, browser-history, or observability logs can recover the webhook credential.
 
@@ -77,7 +75,7 @@ The largest risks are:
 
 ### 3. Critical — A leaked credential permits forged events across all clients
 
-**File and line:** [src/server.ts:18](../src/server.ts#L18), [src/server.ts:36](../src/server.ts#L36), [src/core/types.ts:9](../src/core/types.ts#L9), [src/integrations/instantly.ts:111](../src/integrations/instantly.ts#L111)
+**File and line:** [src/server.ts:18](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L18), [src/server.ts:36](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L36), [src/core/types.ts:9](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/types.ts#L9), [src/integrations/instantly.ts:111](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L111)
 
 **What can go wrong:** An attacker can submit a fabricated “positive reply” for a chosen client, lead email, campaign, and sending account. The resulting draft can be sent as a real reply.
 
@@ -102,7 +100,7 @@ This proves only possession of a shared string, not that Instantly generated the
 
 ### 4. Critical — Duplicate sends are not durably prevented
 
-**File and line:** [src/core/dedupe.ts:16](../src/core/dedupe.ts#L16), [src/core/dedupe.ts:20](../src/core/dedupe.ts#L20), [src/server.ts:62](../src/server.ts#L62), [src/integrations/instantly.ts:104](../src/integrations/instantly.ts#L104)
+**File and line:** [src/core/dedupe.ts:16](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/dedupe.ts#L16), [src/core/dedupe.ts:20](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/dedupe.ts#L20), [src/server.ts:62](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L62), [src/integrations/instantly.ts:104](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L104)
 
 **What can go wrong:** The same reply can cause multiple emails.
 
@@ -129,7 +127,7 @@ The comments saying the worst case is a repeated Discord post cease to be true o
 
 ### 5. Critical — The endpoint acknowledges work before it is durable
 
-**File and line:** [src/server.ts:62](../src/server.ts#L62), [src/server.ts:68](../src/server.ts#L68), [src/server.ts:73](../src/server.ts#L73)
+**File and line:** [src/server.ts:62](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L62), [src/server.ts:68](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L68), [src/server.ts:73](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L73)
 
 **What can go wrong:** A prospect reply—including an opt-out—can be acknowledged and then never classified, unsubscribed, alerted, or answered.
 
@@ -147,7 +145,7 @@ Additionally, the dedupe key is recorded before processing, so an immediate manu
 
 ### 6. Critical — There is no authoritative suppression check immediately before sending
 
-**File and line:** [src/core/pipeline.ts:29](../src/core/pipeline.ts#L29), [src/core/pipeline.ts:41](../src/core/pipeline.ts#L41), [src/integrations/instantly.ts:104](../src/integrations/instantly.ts#L104)
+**File and line:** [src/core/pipeline.ts:29](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L29), [src/core/pipeline.ts:41](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L41), [src/integrations/instantly.ts:104](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L104)
 
 **What can go wrong:** The bot can email someone who has already opted out, including when an opt-out event and a positive-looking event are processed concurrently.
 
@@ -163,7 +161,7 @@ Additionally, the dedupe key is recorded before processing, so an immediate manu
 
 ### 7. High — Failed or impossible opt-outs can remain silent and be logged as successful
 
-**File and line:** [src/core/pipeline.ts:41](../src/core/pipeline.ts#L41), [src/core/pipeline.ts:43](../src/core/pipeline.ts#L43), [src/core/pipeline.ts:48](../src/core/pipeline.ts#L48), [src/core/pipeline.ts:68](../src/core/pipeline.ts#L68), [src/integrations/instantly.ts:64](../src/integrations/instantly.ts#L64)
+**File and line:** [src/core/pipeline.ts:41](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L41), [src/core/pipeline.ts:43](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L43), [src/core/pipeline.ts:48](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L48), [src/core/pipeline.ts:68](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L68), [src/integrations/instantly.ts:64](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L64)
 
 **What can go wrong:** An opt-out is not applied, nobody is reliably alerted, and operational logs still say `"unsubscribed": true`.
 
@@ -185,7 +183,7 @@ Additionally, the dedupe key is recorded before processing, so an immediate manu
 
 ### 8. High — Untrusted model output is being used as send authorization
 
-**File and line:** [src/classify/openai.ts:35](../src/classify/openai.ts#L35), [src/classify/openai.ts:77](../src/classify/openai.ts#L77), [src/classify/rules.ts:89](../src/classify/rules.ts#L89), [src/core/decide.ts:113](../src/core/decide.ts#L113)
+**File and line:** [src/classify/openai.ts:35](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/classify/openai.ts#L35), [src/classify/openai.ts:77](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/classify/openai.ts#L77), [src/classify/rules.ts:89](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/classify/rules.ts#L89), [src/core/decide.ts:113](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/decide.ts#L113)
 
 **What can go wrong:** A negative, opt-out, legal, or adversarial reply can be classified with high confidence as draftable and receive an automated sales response.
 
@@ -209,7 +207,7 @@ Structured output restricts the response shape; it does not make the classificat
 
 ### 9. High — Send-critical payload fields are optional and insufficiently bound
 
-**File and line:** [src/core/types.ts:9](../src/core/types.ts#L9), [src/core/normalize.ts:98](../src/core/normalize.ts#L98), [src/integrations/instantly.ts:113](../src/integrations/instantly.ts#L113)
+**File and line:** [src/core/types.ts:9](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/types.ts#L9), [src/core/normalize.ts:98](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/normalize.ts#L98), [src/integrations/instantly.ts:113](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L113)
 
 **What can go wrong:** The system may attempt to send with missing, stale, forged, or mismatched lead, campaign, and sending-account identifiers.
 
@@ -225,7 +223,7 @@ Structured output restricts the response shape; it does not make the classificat
 
 ### 10. High — Auto-send has no kill switch, volume cap, or anomaly circuit breaker
 
-**File and line:** [src/core/config.ts:4](../src/core/config.ts#L4), [src/core/pipeline.ts:32](../src/core/pipeline.ts#L32)
+**File and line:** [src/core/config.ts:4](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/config.ts#L4), [src/core/pipeline.ts:32](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L32)
 
 **What can go wrong:** A classifier regression, forged webhook flood, bad client configuration, or template mistake can continue emailing prospects until a person notices manually.
 
@@ -241,7 +239,7 @@ Structured output restricts the response shape; it does not make the classificat
 
 ### 11. High — The irreversible webhook, unsubscribe, and send paths have no tests
 
-**File and line:** [src/server.ts:44](../src/server.ts#L44), [src/core/pipeline.ts:24](../src/core/pipeline.ts#L24), [src/integrations/instantly.ts:60](../src/integrations/instantly.ts#L60), [vitest.config.ts:4](../vitest.config.ts#L4)
+**File and line:** [src/server.ts:44](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/server.ts#L44), [src/core/pipeline.ts:24](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L24), [src/integrations/instantly.ts:60](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/instantly.ts#L60), [vitest.config.ts:4](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/vitest.config.ts#L4)
 
 **What can go wrong:** Regressions in authentication, acknowledgement ordering, payload validation, opt-out failure handling, client isolation, API request construction, and duplicate prevention reach production undetected.
 
@@ -267,7 +265,7 @@ The README’s statement that the suite covers the “full routing matrix” doe
 
 ### 12. Medium — “Follow up later” sends a promise but records no follow-up
 
-**File and line:** [src/templates/registry.ts:114](../src/templates/registry.ts#L114), [src/core/pipeline.ts:41](../src/core/pipeline.ts#L41)
+**File and line:** [src/templates/registry.ts:114](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/templates/registry.ts#L114), [src/core/pipeline.ts:41](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/core/pipeline.ts#L41)
 
 **What can go wrong:** The bot tells a prospect, “I will make a note to follow up,” but no task, schedule, CRM record, or deferred event is created.
 
@@ -283,7 +281,7 @@ The README’s statement that the suite covers the “full routing matrix” doe
 
 ### 13. Medium — Sensitive prospect content is sent unredacted to two third parties
 
-**File and line:** [src/classify/openai.ts:77](../src/classify/openai.ts#L77), [src/integrations/discord.ts:36](../src/integrations/discord.ts#L36), [src/integrations/discord.ts:43](../src/integrations/discord.ts#L43)
+**File and line:** [src/classify/openai.ts:77](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/classify/openai.ts#L77), [src/integrations/discord.ts:36](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/discord.ts#L36), [src/integrations/discord.ts:43](https://github.com/Raz-Gits/Instantly-Reply-Bot/blob/eb16c284011c35655aefe40b69e22d0a79d7540a/src/integrations/discord.ts#L43)
 
 **What can go wrong:** Email addresses, names, company details, reply bodies, and potentially confidential information are transmitted to OpenAI and Discord.
 
@@ -446,6 +444,17 @@ What I did not do: other languages, detectors for threats, legal wording or prom
 ### What the review caught that I had missed
 
 Three of the findings were live in the version that never sends, not only under auto-send: the secret written to the logs, an opt-out that failed or was skipped while the log said it had worked, and opt-out wording that only the model was reading. I had also left "the worst case is a repeated Discord post" in comments and docs that would stop being true the day auto-send came back, and DEPLOY.md pointed at repo issues that don't exist. The tests went from 59 in 4 files to 115 in 9 files, and the new ones sit at the boundary Codex said had none.
+
+### Verification pass
+
+After the nine commits above were pushed, Codex re-checked each fix against its finding and returned KEEP_WITH_FOLLOWUPS: no change warranted reverting, and four things needed a follow-up. I made all four:
+
+1. Secret masking was not universal. A percent-encoded key (`?se%63ret=...`) authenticated but was not masked, and the pipeline's console logs never passed through the masking stream. Every log line now goes through one masking function that decodes query keys the way Fastify does, and the pipeline, Discord and startup code log through it. Commit `0ac3cce`.
+2. Negated wording such as "Please don't stop emailing me" matched the opt-out check and alerted. A "stop ..." right after "don't", "do not" or "never" no longer counts; anything looser still alerts. Commit `7753238`.
+3. The README said normalizing strips signatures, and the playbook said opt-outs "never get another email". Both now say what the code does: recognized quoted history is stripped, and the unsubscribe is attempted, with an alert if it fails or is skipped. Commit `3bbc83d`.
+4. The links in this record resolved against the latest commit, so their line anchors pointed at changed code. They are now pinned to `eb16c28`, and a test keeps them that way. This is the commit that adds this note.
+
+Codex again could not start vitest in its sandbox. After the follow-ups, my run: `npm run typecheck` passes, and `npx vitest run` passes 139 tests in 11 files.
 
 ## Verification
 
