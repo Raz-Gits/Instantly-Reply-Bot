@@ -74,12 +74,16 @@ Also set:
 
 Judge only the person's own words. Ignore quoted history and signatures.`;
 
+/**
+ * Only what classification needs: the subject and the reply. The system
+ * prompt never uses the lead's name, email address or company, or the
+ * campaign name, so none of those are sent. The reply body can still carry a
+ * signature; cutting signatures reliably would also cut words the classifier
+ * needs, so the body goes as written (quoted history already stripped).
+ */
 function buildUserPrompt(event: ReplyEvent): string {
-  const { lead, replyText, replySubject, campaignName } = event;
+  const { replyText, replySubject } = event;
   return [
-    `Campaign: ${campaignName || '(unknown)'}`,
-    `From: ${lead.fullName || '(unknown)'} <${lead.email || 'unknown'}>`,
-    `Company: ${lead.companyName || '(unknown)'}`,
     `Subject: ${replySubject || '(none)'}`,
     '',
     'Reply body:',

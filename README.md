@@ -105,6 +105,12 @@ The suite covers the full routing matrix, per-client overrides, the playbook gua
 - **Unknown webhook slug** → classified + alerted to the global channel, never drafted.
 - **Bad secret** → `401`. **Malformed payload** → `400`. **Any event other than `reply_received`** → `202 ignored`, not processed. A payload with no `event_type` is still processed, with a warning in the log.
 
+## What leaves the server
+
+- **OpenAI** gets the reply's subject and body and nothing else: not the lead's name, email address or company, and not the campaign name. A signature inside the reply body still goes with it.
+- **Discord** gets everything: name, email, company, the reply, the classification and any draft, because the person answering needs all of it. Keep those channels to the people who handle replies.
+- **Instantly** gets the lead's email when the bot adds them to the block list.
+
 ## Using it with a different email tool
 
 It's built for Instantly, but only three files know that:
