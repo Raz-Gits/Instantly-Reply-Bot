@@ -3,6 +3,7 @@ import { notifyDiscord, notifyDiscordText } from '../integrations/discord.js';
 import { markLeadUnsubscribed, type UnsubscribeResult } from '../integrations/instantly.js';
 import type { ClientProfile } from './clients.js';
 import { decide } from './decide.js';
+import { log } from './log.js';
 import { normalizeEvent } from './normalize.js';
 import type { Decision, InstantlyWebhook, ReplyEvent } from './types.js';
 
@@ -34,7 +35,7 @@ async function alertUnappliedOptOut(
     client,
   );
   if (!posted) {
-    console.error(
+    log.error(
       `[pipeline] opt-out alert did not post: ${event.lead.email || '(no email)'} in ${client.slug} is still NOT unsubscribed (${result.status}: ${result.why})`,
     );
   }
@@ -81,7 +82,7 @@ export async function processWebhook(
   const notified =
     decision.action === 'ignore' ? false : await notifyDiscord(event, decision, client);
 
-  console.log(
+  log.info(
     JSON.stringify({
       at: 'pipeline',
       client: client?.slug ?? slug ?? null,

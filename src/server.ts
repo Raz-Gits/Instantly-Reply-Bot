@@ -4,6 +4,7 @@ import { getClient, loadClients } from './core/clients.js';
 import { getConfig } from './core/config.js';
 import { makeEventKey, seenBefore } from './core/dedupe.js';
 import { processWebhook } from './core/pipeline.js';
+import { redactSecrets } from './core/redact.js';
 import { InstantlyWebhookSchema } from './core/types.js';
 import { notifyDiscordText } from './integrations/discord.js';
 
@@ -27,16 +28,6 @@ function isAuthorized(request: FastifyRequest): boolean {
     (typeof header === 'string' && header) || (typeof query === 'string' && query) || '';
 
   return Boolean(provided) && secretMatches(provided, WEBHOOK_SECRET);
-}
-
-/**
- * The secret can arrive as ?secret=, so it can sit inside a request URL, and
- * Fastify logs URLs. This masks any secret= value, right or wrong, and the
- * configured secret itself wherever it appears, before a line is written.
- */
-function redactSecrets(text: string, secret: string): string {
-  const masked = text.replace(/([?&]secret=)[^&#\s"]*/gi, '$1[redacted]');
-  return secret ? masked.split(secret).join('[redacted]') : masked;
 }
 
 export interface ServerOptions {
@@ -133,7 +124,11 @@ export function buildServer(options: ServerOptions = {}): FastifyInstance {
       // We already acked, so Instantly will never retry this delivery — a
       // failure here is invisible unless a human is told. notifyDiscordText
       // never throws, so a Discord outage can't cascade.
-      const summary = error instanceof Error ? error.message : String(error);
+      // An error message is arbitrary text, so it is masked before it leaves.
+      const summary = redactSecrets(
+        error instanceof Error ? error.message : String(error),
+        config.WEBHOOK_SECRET,
+      );
       const lead = parsed.data.lead_email ?? parsed.data.email ?? 'unknown lead';
       await notifyDiscordText(
         `🚨 Reply pipeline failed for **${slug}** (${lead}) — the reply was NOT drafted or triaged; handle it manually in the Unibox. ${summary.slice(0, 400)}`,

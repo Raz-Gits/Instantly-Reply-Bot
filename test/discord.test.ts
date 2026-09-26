@@ -13,6 +13,7 @@ const fetchMock = vi.fn();
 beforeAll(() => {
   setConfigForTesting({
     CONFIDENCE_THRESHOLD: 0.7,
+    WEBHOOK_SECRET: 'discord-test-secret-51f0',
     DISCORD_WEBHOOK_URL: 'https://discord.invalid/api/webhooks/global',
   });
   setClientsForTesting({
@@ -103,5 +104,19 @@ describe('Discord embed', () => {
     const decision = decide(event, classification('unclear'), acme());
 
     await expect(notifyDiscord(event, decision, acme())).resolves.toBe(false);
+  });
+});
+
+describe('Discord error logging', () => {
+  it('masks the configured secret in a logged error', async () => {
+    fetchMock.mockRejectedValue(new Error('proxy refused discord-test-secret-51f0'));
+    const event = normalizeEvent({ lead_email: 'lead@prospect.example', reply_text: 'hi' });
+    const decision = decide(event, classification('unclear'), acme());
+
+    await notifyDiscord(event, decision, acme());
+
+    const logged = vi.mocked(console.error).mock.calls.map((call) => call.join(' ')).join(' ');
+    expect(logged).toContain('proxy refused [redacted]');
+    expect(logged).not.toContain('discord-test-secret-51f0');
   });
 });

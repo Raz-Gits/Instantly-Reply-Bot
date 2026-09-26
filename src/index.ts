@@ -1,4 +1,5 @@
 import { getConfig } from './core/config.js';
+import { log } from './core/log.js';
 import { buildServer } from './server.js';
 
 async function main(): Promise<void> {
@@ -19,6 +20,6 @@ async function main(): Promise<void> {
 }
 
 main().catch((error) => {
-  console.error(error instanceof Error ? error.message : error);
+  log.error(error instanceof Error ? error.message : error);
   process.exit(1);
 });

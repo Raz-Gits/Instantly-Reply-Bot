@@ -241,3 +241,70 @@ describe('webhook endpoint', () => {
     expect(client?.slug).toBe('acme');
   });
 });
+
+describe('secret masking covers encoded parameters and error text', () => {
+  // A secret with a reserved character, so its URL form differs from its value.
+  const SLASH_SECRET = 'slash/secret/2468';
+  const ENCODED_VALUE = 'slash%2Fsecret%2F2468';
+
+  /** Rebuilds the server with a different configured secret for one test. */
+  async function withSecret(secret: string, run: () => Promise<void>) {
+    await app.close();
+    setConfigForTesting({ WEBHOOK_SECRET: secret });
+    app = buildServer({ logStream: { write: (line: string) => logLines.push(line) } });
+    try {
+      await run();
+    } finally {
+      setConfigForTesting({ WEBHOOK_SECRET: SECRET });
+    }
+  }
+
+  it('masks an encoded key and value that authenticate', async () => {
+    await withSecret(SLASH_SECRET, async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/webhooks/instantly/acme?se%63ret=${ENCODED_VALUE}`,
+        payload: replyPayload,
+      });
+
+      // Fastify decodes the key and value, so this really is the secret.
+      expect(res.statusCode).toBe(202);
+      expect(logs()).toContain('/webhooks/instantly/acme?se%63ret=[redacted]');
+      expect(logs()).not.toContain(ENCODED_VALUE);
+      expect(logs()).not.toContain(SLASH_SECRET);
+    });
+  });
+
+  it('masks an encoded key and value on an unknown route', async () => {
+    await withSecret(SLASH_SECRET, async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/webhooks/instantly?se%63ret=${ENCODED_VALUE}`,
+        payload: replyPayload,
+      });
+
+      expect(res.statusCode).toBe(404);
+      expect(logs()).toContain('not found');
+      expect(logs()).not.toContain(ENCODED_VALUE);
+    });
+  });
+
+  it('masks the secret inside a pipeline error, in the log and in the Discord alert', async () => {
+    vi.mocked(processWebhook).mockRejectedValueOnce(new Error(`upstream said ${SECRET}`));
+
+    await app.inject({
+      method: 'POST',
+      url: '/webhooks/instantly/acme',
+      headers: { 'x-webhook-secret': SECRET },
+      payload: replyPayload,
+    });
+
+    await vi.waitFor(() => expect(notifyDiscordText).toHaveBeenCalledTimes(1));
+    expect(logs()).toContain('pipeline failed');
+    expect(logs()).toContain('upstream said [redacted]');
+    expect(logs()).not.toContain(SECRET);
+    const [message] = vi.mocked(notifyDiscordText).mock.calls[0]!;
+    expect(message).toContain('upstream said [redacted]');
+    expect(message).not.toContain(SECRET);
+  });
+});

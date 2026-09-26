@@ -21,6 +21,7 @@ import { notifyDiscord, notifyDiscordText } from '../src/integrations/discord.js
 import { markLeadUnsubscribed, sendReply } from '../src/integrations/instantly.js';
 
 const LEAD_EMAIL = 'lead@prospect.example';
+const SECRET = 'pipeline-secret-7c1e9a4b';
 
 function payload(replyText: string, extra: Record<string, string> = {}) {
   return {
@@ -79,6 +80,7 @@ const acme = () => getClient('acme') as ClientProfile;
 beforeAll(() => {
   setConfigForTesting({
     CONFIDENCE_THRESHOLD: 0.7,
+    WEBHOOK_SECRET: SECRET,
     OPENAI_MODEL: 'gpt-4o-mini',
     DISCORD_WEBHOOK_URL: 'https://discord.invalid/api/webhooks/global',
   });
@@ -273,5 +275,28 @@ describe('side effects on each path', () => {
     expect(result.decision.action).toBe('alert');
     expect(result.decision.classification.intent).toBe('unclear');
     expect(notifyDiscord).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('pipeline log lines are masked too', () => {
+  it('masks the configured secret in the error and summary lines', async () => {
+    vi.mocked(markLeadUnsubscribed).mockResolvedValue({
+      status: 'failed',
+      why: `Instantly echoed ?secret=${SECRET} back`,
+    });
+    vi.mocked(notifyDiscordText).mockResolvedValue(false);
+
+    await processWebhook(payload('unsubscribe'), acme(), 'acme');
+
+    const [errorLine] = vi.mocked(console.error).mock.calls[0]!;
+    expect(errorLine).toContain('NOT unsubscribed');
+    expect(errorLine).toContain('[redacted]');
+    expect(errorLine).not.toContain(SECRET);
+    expect(summaryLine().unsubscribeWhy).toBe('Instantly echoed ?secret=[redacted] back');
+    const everything = [
+      ...vi.mocked(console.log).mock.calls,
+      ...vi.mocked(console.error).mock.calls,
+    ].join(' ');
+    expect(everything).not.toContain(SECRET);
   });
 });

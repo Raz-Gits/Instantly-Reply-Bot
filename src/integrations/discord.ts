@@ -1,5 +1,6 @@
 import type { ClientProfile } from '../core/clients.js';
 import { getConfig } from '../core/config.js';
+import { log } from '../core/log.js';
 import type { Decision, ReplyEvent } from '../core/types.js';
 
 const COLORS = {
@@ -90,12 +91,12 @@ async function post(webhookUrl: string, payload: unknown): Promise<boolean> {
 
     if (!response.ok) {
       const detail = await response.text().catch(() => '');
-      console.error(`[discord] webhook returned ${response.status}: ${truncate(detail, 500)}`);
+      log.error(`[discord] webhook returned ${response.status}: ${truncate(detail, 500)}`);
       return false;
     }
     return true;
   } catch (error) {
-    console.error('[discord] failed to post notification:', error);
+    log.error('[discord] failed to post notification:', error);
     return false;
   }
 }
