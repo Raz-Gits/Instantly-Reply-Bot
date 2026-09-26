@@ -201,3 +201,23 @@ describe('opt-out outcomes are reported truthfully and loudly', () => {
     expect(logged).toContain('NOT unsubscribed');
   });
 });
+
+describe('opt-out wording through the whole pipeline', () => {
+  it('alerts, and does not unsubscribe, when the model calls an opt-out "interested"', async () => {
+    const model = stubModel('interested', 0.99);
+
+    const result = await processWebhook(
+      payload('Please stop contacting our company'),
+      acme(),
+      'acme',
+    );
+
+    expect(model).toHaveBeenCalledTimes(1);
+    expect(result.decision.action).toBe('alert');
+    expect(result.decision.reason).toMatch(/opt-out language detected/i);
+    expect(notifyDiscord).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(notifyDiscord).mock.calls[0]![1].action).toBe('alert');
+    expect(markLeadUnsubscribed).not.toHaveBeenCalled();
+    expect(sendReply).not.toHaveBeenCalled();
+  });
+});

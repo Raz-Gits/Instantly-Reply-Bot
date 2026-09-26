@@ -36,13 +36,14 @@ Each stage lives in its own module: [normalize.ts](src/core/normalize.ts), [clas
 
 ## Routing rules (in evaluation order)
 
-1. **Ignore + unsubscribe**: bare `unsubscribe` / `not_interested` replies are dropped and the lead is added to that workspace's block list via the Instantly API. OOO and auto-replies are dropped without the API call.
-2. **Complex negatives alert**: any negative reply with substance (a reason, a complaint, anger), even an angry unsubscribe, which *also* still gets the unsubscribe API call.
-3. **Deterministic guards** (from the reply playbook): more than 150 words / 900 characters, or more than 2 questions → alert. Counted in code, not judged by the model.
-4. **Escalation flags** → alert regardless of intent: `named_competitor`, `referral_mention`, `existing_relationship`, `legal_or_contract`, `negotiation_terms`, `technical_deep_dive`, `press_media`, `sensitive_info`.
-5. **Always-alert intents**: `referral` (both directions, handled personally), `objection`, `unclear`.
-6. **Low confidence** (< `CONFIDENCE_THRESHOLD`, default 0.7) → alert.
-7. **Template lookup** under the client's config → draft, or alert if no template / template disabled / a needed profile field is blank.
+1. **Opt-out wording, checked in code**: a reply containing "stop contacting/emailing", "remove me/us", "unsubscribe", "do not contact", "take me off" or "opt out" (English, case-insensitive) can never be drafted or silently dropped, whatever the model says. If the model also read it as an opt-out, rule 2 applies. Otherwise it alerts, and a person decides whether to unsubscribe; the pattern alone never does.
+2. **Ignore + unsubscribe**: bare `unsubscribe` / `not_interested` replies are dropped and the lead is added to that workspace's block list via the Instantly API. OOO and auto-replies are dropped without the API call.
+3. **Complex negatives alert**: any negative reply with substance (a reason, a complaint, anger), even an angry unsubscribe, which *also* still gets the unsubscribe API call.
+4. **Deterministic guards** (from the reply playbook): more than 150 words / 900 characters, or more than 2 questions → alert. Counted in code, not judged by the model.
+5. **Escalation flags** → alert regardless of intent: `named_competitor`, `referral_mention`, `existing_relationship`, `legal_or_contract`, `negotiation_terms`, `technical_deep_dive`, `press_media`, `sensitive_info`.
+6. **Always-alert intents**: `referral` (both directions, handled personally), `objection`, `unclear`.
+7. **Low confidence** (< `CONFIDENCE_THRESHOLD`, default 0.7) → alert.
+8. **Template lookup** under the client's config → draft, or alert if no template / template disabled / a needed profile field is blank.
 
 That last point is a feature: a client with an empty `pricingInfo` simply has pricing replies escalated to Discord instead of auto-drafted. Blank fields degrade to human handling, never to broken drafts.
 

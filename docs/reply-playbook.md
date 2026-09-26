@@ -149,6 +149,7 @@ The bot never auto-replies to any of these. The full message, who sent it, and t
 
 - Reply is **longer than 150 words** (or 900 characters)
 - Reply asks **more than 2 questions**
+- Reply contains **opt-out wording** ("stop contacting", "remove me", "unsubscribe", "take me off", "opt out") that the AI did not read as an opt-out. A person checks it and unsubscribes them if they meant it.
 
 **Content that always gets a human:**
 

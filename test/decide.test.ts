@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { setClientsForTesting, type ClientProfile } from '../src/core/clients.js';
 import { setConfigForTesting } from '../src/core/config.js';
-import { decide } from '../src/core/decide.js';
+import { decide, findOptOutLanguage } from '../src/core/decide.js';
 import { normalizeEvent } from '../src/core/normalize.js';
 import { getClient } from '../src/core/clients.js';
 import type { Classification, EscalationFlag, Intent, Sentiment } from '../src/core/types.js';
@@ -252,5 +252,68 @@ describe('decide — per-client config', () => {
   it('alerts on intents with no template (proof stays covered, unclear does not)', () => {
     const d = decide(event('hmm'), classification('unclear'), acme());
     expect(d.action).toBe('alert');
+  });
+});
+
+describe('decide: opt-out wording never depends on the model', () => {
+  it('alerts on "Please stop contacting our company" even when the model says interested at 0.99', () => {
+    const d = decide(
+      event('Please stop contacting our company.'),
+      classification('interested', { confidence: 0.99, sentiment: 'positive' }),
+      acme(),
+    );
+    expect(d.action).toBe('alert');
+    expect(d.reason).toMatch(/opt-out language detected/i);
+    expect(d.draft).toBeUndefined();
+    // A pattern alone never unsubscribes; a person decides.
+    expect(d.unsubscribeLead).toBe(false);
+  });
+
+  it.each([
+    'Remove us from your list please.',
+    'How do I unsubscribe from these?',
+    'Do not contact me again.',
+    'Don’t email me about this.',
+    'Take me off this sequence, thanks.',
+    'Please opt me out.',
+    'I would like to opt-out.',
+    'STOP EMAILING ME',
+  ])('never drafts %j, whatever the classification', (text) => {
+    const d = decide(event(text), classification('interested', { confidence: 0.99 }), acme());
+    expect(d.action).toBe('alert');
+    expect(d.unsubscribeLead).toBe(false);
+  });
+
+  it('does not let an out-of-office reading silently drop an opt-out', () => {
+    const d = decide(
+      event('I am out of the office until Monday. Also, please stop emailing me.'),
+      classification('out_of_office'),
+      acme(),
+    );
+    expect(d.action).toBe('alert');
+  });
+
+  it('leaves the opt-out path unchanged when the model also reads it as an opt-out', () => {
+    const d = decide(
+      event('Please stop contacting our company.'),
+      classification('unsubscribe', { sentiment: 'negative' }),
+      acme(),
+    );
+    expect(d.action).toBe('ignore');
+    expect(d.unsubscribeLead).toBe(true);
+  });
+
+  it('still drafts a normal positive reply', () => {
+    const d = decide(
+      event('Sounds good, happy to chat next week.'),
+      classification('interested', { sentiment: 'positive' }),
+      acme(),
+    );
+    expect(d.action).toBe('draft');
+  });
+
+  it('does not match look-alike words', () => {
+    expect(findOptOutLanguage('We adopted a new CRM, but sure, send the link.')).toBeNull();
+    expect(findOptOutLanguage('Could not stop thinking about your email. Let us talk.')).toBeNull();
   });
 });

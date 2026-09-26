@@ -38,9 +38,35 @@ function countQuestions(text: string): number {
 }
 
 /**
+ * Opt-out wording checked in code, so an opt-out never depends on the model
+ * reading it right. Deliberately broad: a false match only sends the reply to
+ * a person instead of a draft. English only.
+ */
+const OPT_OUT_PATTERNS: readonly RegExp[] = [
+  /\bstop (contacting|e-?mailing|mailing|messaging|reaching out|sending|writing)\b/i,
+  /\bremove (me|us|my email|my address|our email|our address)\b/i,
+  /\bunsubscrib/i, // unsubscribe, unsubscribed, unsubscribing
+  /\b(do not|don['’]?t) (contact|e-?mail|message|write to|reach out)\b/i,
+  /\btake (me|us) off\b/i,
+  /\bopt(ing)?[- ]?out\b/i,
+  /\bopt (me|us) out\b/i,
+];
+
+/** Returns the opt-out phrase found in the reply, or null. */
+export function findOptOutLanguage(text: string): string | null {
+  for (const pattern of OPT_OUT_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+/**
  * Routes a classified reply to exactly one of: ignore, draft, alert.
  *
- * The ordering matters. Ignores come first so a long OOO doesn't trip the
+ * The ordering matters. Opt-out wording is checked first, in code, so no
+ * classification can turn it into a draft or a silent ignore. Ignores come
+ * next so a long OOO doesn't trip the
  * length guard; the deterministic guards come before any drafting so no reply
  * over the playbook limits is ever auto-answered; flags and confidence come
  * before template lookup so a shaky match reaches a human.
@@ -53,6 +79,19 @@ export function decide(
   const { CONFIDENCE_THRESHOLD } = getConfig();
   const unsubscribeLead = UNSUBSCRIBE_INTENTS.has(classification.intent);
   const base = { classification, unsubscribeLead };
+
+  // 0. Opt-out wording found by pattern. When the model also read the reply
+  //    as an opt-out, the unsubscribe path below already honours it.
+  //    Otherwise a person decides: no draft, no silent ignore, and no
+  //    unsubscribe on a pattern alone.
+  const optOutPhrase = findOptOutLanguage(event.replyText);
+  if (optOutPhrase && !UNSUBSCRIBE_INTENTS.has(classification.intent)) {
+    return {
+      ...base,
+      action: 'alert',
+      reason: `Opt-out language detected ("${optOutPhrase}") although the classifier said "${classification.intent}". Not drafted. If they meant it, add them to the block list.`,
+    };
+  }
 
   // 1. Bare opt-outs, simple declines, and automated mail — drop the reply.
   //    (unsubscribeLead still marks the lead in Instantly where applicable.)
