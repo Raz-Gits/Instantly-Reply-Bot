@@ -86,19 +86,26 @@ seconds. That reply → Discord round-trip is the demo.
 
 - **Duplicates:** redeliveries inside a 6-hour window are acked (`202
   duplicate`) and dropped. The ledger is in memory, capped at 2,000 entries
-  (`src/core/dedupe.ts`). A restart forgets the ledger; the worst case is a
-  repeated Discord post, never a lost reply.
+  (`src/core/dedupe.ts`). A restart forgets the ledger; while nothing sends
+  email, the worst case is a repeated Discord post, never a lost reply. With
+  auto-send on it would be a repeated email, which is why a durable ledger is
+  on the checklist below.
 - **Pipeline failures page a human:** any error after the ack posts a 🚨 to the
   client's Discord channel naming the lead, because Instantly will never retry
   an acked delivery. If you see one, the reply still needs manual handling in
   the Unibox.
 - **Auto-send stays off.** `sendReply` exists and is intentionally never
   called; the one automated write is the unsubscribe (compliance action). Keep
-  it that way until a human has reviewed drafts for a few weeks.
+  it that way until a human has reviewed drafts for a few weeks and every item
+  in the README's
+  [Before you turn auto-send back on](README.md#before-you-turn-auto-send-back-on)
+  list is done.
 - **Known limit:** an event that arrives in the instant between ack and
   processing during a crash/redeploy is acked but unprocessed. At current
-  volume this is an accepted trade-off; the durable fix (write-ahead table in
-  Supabase) is sketched in the repo issues.
+  volume, with nothing sent automatically, this is an accepted trade-off. The
+  durable fix, an event ledger written before the `202`, is on the README's
+  [Before you turn auto-send back on](README.md#before-you-turn-auto-send-back-on)
+  list.
 - **Rotate** `WEBHOOK_SECRET` by setting a new value and updating the Instantly
   webhook header (or URL) in the same sitting; the old value dies the moment
   the var changes. Rotate it before going live again if it was ever sent as

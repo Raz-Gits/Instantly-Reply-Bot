@@ -6,7 +6,7 @@ Answers replies to cold email campaigns run in [Instantly.ai](https://instantly.
 | --- | --- | --- |
 | **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. Opt-outs and declines are also marked unsubscribed in that client's Instantly workspace. |
 | **draft** | Intent matches a reply template, confidence ≥ threshold, no escalation flags | Template rendered with the lead's details and the client's profile, posted to that client's Discord channel for approval. |
-| **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence, requests to follow up later | Posted to Discord with the reply, the classification, and why it needs you. A follow-up-later alert also carries the reply to send once you have set the reminder. |
+| **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence, requests to follow up later, opt-out wording the model didn't read as an opt-out | Posted to Discord with the reply, the classification, and why it needs you. A follow-up-later alert also carries the reply to send once you have set the reminder. |
 
 This public version sends nothing to a prospect on its own: the bot drafts, you send. In production the defined cases went out automatically; see [Turning on auto-send](#turning-on-auto-send).
 
@@ -95,7 +95,21 @@ npx tsx scripts/replay.ts --client acme --dry "how much does it cost?"
 npm test && npm run typecheck
 ```
 
-The suite covers the full routing matrix, per-client overrides, the playbook guards, and quoted-reply stripping, with no network access needed.
+`npm test` runs 115 tests in 9 files with no network access: Instantly, Discord and OpenAI are mocked or stubbed, and `fetch` is stubbed wherever a module could reach it.
+
+What they cover:
+
+- routing in `decide()`: every rule above, per-client overrides, the playbook guards and the opt-out wording check
+- rules classification, quote stripping, payload normalizing, client config and dedupe keys
+- the webhook endpoint through Fastify's `inject`: `401`, `400`, `202` accepted, `202` duplicate, non-reply events ignored, unknown slugs, a pipeline error raising an alert, the secret kept out of the logs, `/health` without slugs
+- the pipeline with Instantly and Discord mocked: each unsubscribe outcome and its alert, and drafts posted but never sent
+- what goes to OpenAI and how its answer is read, the Discord embed and a failed post, and the block-list request and how each response is read
+
+What they don't cover:
+
+- real calls to Instantly, OpenAI or Discord, or how well the model classifies real replies
+- a crash or restart between the `202` and the end of processing, or more than one running instance
+- `sendReply` and anything about auto-send, since nothing in this version sends email
 
 ## Failure behaviour
 
@@ -125,4 +139,17 @@ Everything else works the same whatever sent the email: the rules, the OpenAI cl
 
 In production, the defined cases replied automatically through `sendReply` in [instantly.ts](src/integrations/instantly.ts), which calls Instantly's `/emails/reply` endpoint. It started switched off. While testing, every draft went to Discord to be confirmed by hand. Once a client's edge cases were known, the `draft` branch of [pipeline.ts](src/core/pipeline.ts) called `sendReply`, so a reply that cleared every guard was answered in minutes and everything else still came to Discord.
 
-This public version ships with that call removed, so nobody who forks it emails prospects by accident. To turn it on for your own workspace, run it with sending off until you trust the drafts, then call `sendReply` from the `draft` branch. A reply only reaches that branch when it carries no escalation flag, is under 150 words, asks at most two questions, isn't an objection or a referral, clears the confidence threshold, and has a template with every field it needs.
+This public version ships with that call removed, so nobody who forks it emails prospects by accident. A reply only reaches the `draft` branch when it has no opt-out wording, carries no escalation flag, is under 150 words, asks at most two questions, isn't an objection, a referral or a request to follow up later, clears the confidence threshold, and has a template with every field it needs. Those guards decide what may be sent. They don't make sending safe; that takes the list below.
+
+### Before you turn auto-send back on
+
+An adversarial review of this repo assumed auto-send was on and looked for what would go wrong. The findings that only matter once the bot sends email are deferred, not dismissed. Each is a hard requirement before `sendReply` is called again:
+
+- **Finding 1:** the auto-send code in version control, behind a per-client `AUTO_SEND` flag that defaults to off.
+- **Finding 5:** a durable event ledger keyed by a stable provider event ID, written before the `202` goes back.
+- **Finding 4:** an idempotency key on every send, and any ambiguous timeout reconciled with Instantly before a retry.
+- **Finding 6:** an append-only suppression check at the send boundary that fails closed: if the check can't run, nothing is sent.
+- **Finding 9:** a strict schema for the fields a send needs, with the campaign and sending account bound to the client.
+- **Finding 10:** per-client and global send caps, a small canary quota, and a kill switch that works without a redeploy.
+- **Finding 3:** a secret per client instead of one shared secret, signature verification if Instantly offers it, and rate limiting on the webhook.
+- **Finding 11:** an end-to-end test proving one input produces at most one send.

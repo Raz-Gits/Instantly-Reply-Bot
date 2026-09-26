@@ -5,9 +5,10 @@ import { getConfig } from '../core/config.js';
  * Thin Instantly API v2 client. Each client profile maps to its own Instantly
  * workspace, so every call takes the workspace API key explicitly.
  *
- * The bot runs in draft-only mode for outbound email: `sendReply` exists so
- * flipping to auto-send later is a one-line change in the pipeline, but it is
- * intentionally never called — no reply reaches a prospect without a human.
+ * The bot runs in draft-only mode for outbound email: `sendReply` exists but
+ * is intentionally never called, so no reply reaches a prospect without a
+ * human. Calling it is not a one-line change: the README's "Before you turn
+ * auto-send back on" lists what has to exist first.
  * The one automated write is `markLeadUnsubscribed`, which is a compliance
  * action, not an email send.
  */

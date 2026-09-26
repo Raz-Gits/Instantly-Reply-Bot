@@ -10,7 +10,9 @@ import type { InstantlyWebhook } from './types.js';
  *
  * In-memory is a deliberate trade-off: a restart forgets history, but the
  * realistic redelivery window is minutes, and the cost of a false negative is
- * one repeated Discord post — not a lost reply.
+ * one repeated Discord post, not a lost reply. That holds only while nothing
+ * sends email: with auto-send on, a false negative is a second email, and this
+ * ledger is not enough (see README, "Before you turn auto-send back on").
  */
 
 const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
