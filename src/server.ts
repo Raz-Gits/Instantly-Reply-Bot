@@ -7,6 +7,9 @@ import { processWebhook } from './core/pipeline.js';
 import { InstantlyWebhookSchema } from './core/types.js';
 import { notifyDiscordText } from './integrations/discord.js';
 
+/** The only Instantly event this bot acts on. */
+const REPLY_EVENT_TYPE = 'reply_received';
+
 /** Constant-time compare so the secret can't be recovered by timing the endpoint. */
 function secretMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
@@ -71,10 +74,12 @@ export function buildServer(options: ServerOptions = {}): FastifyInstance {
     },
   });
 
+  // Public, so it gives a count, not the client slugs: a slug is half of a
+  // webhook URL.
   app.get('/health', async () => ({
     status: 'ok',
     uptime: process.uptime(),
-    clients: [...clients.keys()],
+    clientCount: clients.size,
   }));
 
   // One webhook URL per Instantly workspace/campaign: /webhooks/instantly/<slug>.
@@ -93,6 +98,19 @@ export function buildServer(options: ServerOptions = {}): FastifyInstance {
       request.log.warn({ issues: parsed.error.issues }, 'malformed webhook payload');
       // 400, not 500: the payload is wrong, so redelivering it won't help.
       return reply.code(400).send({ error: 'invalid payload' });
+    }
+
+    // Only replies are handled. A webhook set to "All Events", or a second
+    // webhook pointed here, sends opens, clicks and sends too; those are
+    // acknowledged (so Instantly doesn't retry) and dropped. Instantly's docs
+    // list event_type as always present, but the schema has never required
+    // it, so a payload without one is still processed, with a warning.
+    const eventType = parsed.data.event_type;
+    if (eventType === undefined) {
+      request.log.warn({ slug }, 'webhook payload has no event_type; processing it as a reply');
+    } else if (eventType !== REPLY_EVENT_TYPE) {
+      request.log.info({ slug, eventType }, 'non-reply webhook event ignored');
+      return reply.code(202).send({ status: 'ignored' });
     }
 
     // Redeliveries and double-fires get acked and dropped, not re-processed —

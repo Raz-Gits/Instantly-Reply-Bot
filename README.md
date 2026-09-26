@@ -102,7 +102,7 @@ The suite covers the full routing matrix, per-client overrides, the playbook gua
 - **Unsubscribe API call fails** → a warning posts to the client's Discord channel asking for a manual unsubscribe. No key configured → skipped with a log line.
 - **Discord down** → logged, still `202` to Instantly.
 - **Unknown webhook slug** → classified + alerted to the global channel, never drafted.
-- **Bad secret** → `401`. **Malformed payload** → `400`.
+- **Bad secret** → `401`. **Malformed payload** → `400`. **Any event other than `reply_received`** → `202 ignored`, not processed. A payload with no `event_type` is still processed, with a warning in the log.
 
 ## Using it with a different email tool
 

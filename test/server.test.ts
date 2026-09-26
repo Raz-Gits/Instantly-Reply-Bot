@@ -117,3 +117,47 @@ describe('webhook secret stays out of the logs', () => {
     expect(logs()).not.toContain(SECRET);
   });
 });
+
+describe('only reply events are processed', () => {
+  it.each(['email_opened', 'email_sent', 'link_clicked', 'lead_unsubscribed'])(
+    'acknowledges and ignores a %s event',
+    async (eventType) => {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/webhooks/instantly/acme',
+        headers: { 'x-webhook-secret': SECRET },
+        payload: { ...replyPayload, event_type: eventType },
+      });
+
+      expect(res.statusCode).toBe(202);
+      expect(res.json()).toEqual({ status: 'ignored' });
+      expect(processWebhook).not.toHaveBeenCalled();
+    },
+  );
+
+  it('still processes a payload with no event_type, and logs a warning', async () => {
+    const { event_type: _omitted, ...withoutType } = replyPayload;
+    const res = await app.inject({
+      method: 'POST',
+      url: '/webhooks/instantly/acme',
+      headers: { 'x-webhook-secret': SECRET },
+      payload: withoutType,
+    });
+
+    expect(res.statusCode).toBe(202);
+    expect(res.json()).toEqual({ status: 'accepted' });
+    await vi.waitFor(() => expect(processWebhook).toHaveBeenCalledTimes(1));
+    expect(logs()).toContain('no event_type');
+  });
+});
+
+describe('/health', () => {
+  it('reports how many clients loaded without naming them', async () => {
+    const res = await app.inject({ method: 'GET', url: '/health' });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ status: 'ok', clientCount: 2 });
+    expect(res.body).not.toContain('acme');
+    expect(res.body).not.toContain('beta');
+  });
+});

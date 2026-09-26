@@ -65,7 +65,7 @@ on its webhook form.
 ```bash
 # 1. Server is up and the client profile loaded:
 curl https://<service>.up.railway.app/health
-# -> {"status":"ok","uptime":...,"clients":["raz"]}
+# -> {"status":"ok","uptime":...,"clientCount":1}
 
 # 2. Bad secret is rejected:
 curl -s -o /dev/null -w "%{http_code}" -X POST \
