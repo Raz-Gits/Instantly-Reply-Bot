@@ -51,10 +51,14 @@ validated when they load, and a missing or malformed field fails with its name.
 Instantly → workspace → **Settings → Webhooks → Add webhook**:
 
 - Event: `reply_received`
-- URL: `https://<service>.up.railway.app/webhooks/instantly/raz?secret=<WEBHOOK_SECRET>`
+- URL: `https://<service>.up.railway.app/webhooks/instantly/raz`
+- Header: `X-Webhook-Secret: <WEBHOOK_SECRET>`
 
-The `?secret=` query form exists because Instantly's webhook UI can't send
-custom headers; the server accepts either that or `X-Webhook-Secret`.
+The server also accepts the secret on the URL as `?secret=<WEBHOOK_SECRET>`,
+for setups that can't send a header. It masks that value in its own logs,
+but a proxy or host in front of it may still record full URLs, so use the
+header when you can. Instantly's help center lists an optional headers field
+on its webhook form.
 
 ## 4. Verify
 
@@ -96,4 +100,6 @@ seconds. That reply → Discord round-trip is the demo.
   volume this is an accepted trade-off; the durable fix (write-ahead table in
   Supabase) is sketched in the repo issues.
 - **Rotate** `WEBHOOK_SECRET` by setting a new value and updating the Instantly
-  webhook URL in the same sitting; the old URL dies the moment the var changes.
+  webhook header (or URL) in the same sitting; the old value dies the moment
+  the var changes. Rotate it before going live again if it was ever sent as
+  `?secret=`, since older logs may hold it.

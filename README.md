@@ -82,7 +82,7 @@ In that workspace: **Settings → Integrations → Webhooks → Add webhook**
 
 - Event: `Reply Received`
 - URL: `https://your-host/webhooks/instantly/<slug>`
-- Header: `X-Webhook-Secret: <your WEBHOOK_SECRET>` (or append `?secret=...` if your plan hides custom headers)
+- Header: `X-Webhook-Secret: <your WEBHOOK_SECRET>` (or append `?secret=...` if your plan hides custom headers; the server masks that value in its own logs, but a proxy in front of it may not)
 
 The endpoint replies `202` immediately and processes out of band, so a slow OpenAI call never triggers an Instantly redelivery.
 

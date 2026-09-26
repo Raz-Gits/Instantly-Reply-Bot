@@ -26,12 +26,50 @@ function isAuthorized(request: FastifyRequest): boolean {
   return Boolean(provided) && secretMatches(provided, WEBHOOK_SECRET);
 }
 
-export function buildServer(): FastifyInstance {
+/**
+ * The secret can arrive as ?secret=, so it can sit inside a request URL, and
+ * Fastify logs URLs. This masks any secret= value, right or wrong, and the
+ * configured secret itself wherever it appears, before a line is written.
+ */
+function redactSecrets(text: string, secret: string): string {
+  const masked = text.replace(/([?&]secret=)[^&#\s"]*/gi, '$1[redacted]');
+  return secret ? masked.split(secret).join('[redacted]') : masked;
+}
+
+export interface ServerOptions {
+  /** Where log lines go. Defaults to stdout; tests pass a collector. */
+  logStream?: { write(line: string): unknown };
+}
+
+export function buildServer(options: ServerOptions = {}): FastifyInstance {
   const config = getConfig();
   // Fail fast on malformed client config instead of at first webhook.
   const clients = loadClients();
+  const logTarget = options.logStream ?? process.stdout;
 
-  const app = Fastify({ logger: { level: config.LOG_LEVEL } });
+  const app = Fastify({
+    logger: {
+      level: config.LOG_LEVEL,
+      serializers: {
+        // Same fields as Fastify's default, with the URL masked at the source.
+        req: (request) => ({
+          method: request.method,
+          url: redactSecrets(request.url, config.WEBHOOK_SECRET),
+          host: request.host,
+          remoteAddress: request.ip,
+          remotePort: request.socket?.remotePort,
+        }),
+      },
+      // Some lines never pass through the serializer: an unknown route logs
+      // "Route POST:<full url> not found" as plain text. So every line is
+      // masked once more on its way out.
+      stream: {
+        write: (line: string) => {
+          logTarget.write(redactSecrets(line, config.WEBHOOK_SECRET));
+        },
+      },
+    },
+  });
 
   app.get('/health', async () => ({
     status: 'ok',
