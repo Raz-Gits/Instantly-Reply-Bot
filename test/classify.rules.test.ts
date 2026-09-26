@@ -90,3 +90,15 @@ describe('normalizeEvent', () => {
     expect(e.replyText).toBe('Sounds good\nLets talk');
   });
 });
+
+describe('stripQuotedReply strips recognized quoted history only', () => {
+  it('keeps an ordinary signature, as the README says', () => {
+    const text = ['Sounds good, send the link.', '', 'Best,', 'Jane Doe', 'VP Sales, Corp', '555 0100'].join('\n');
+    expect(stripQuotedReply(text)).toBe(text);
+  });
+
+  it('cuts at a "Sent from my" line and everything after it', () => {
+    const text = ['Sure, Thursday works.', '', 'Sent from my iPhone', 'Jane'].join('\n');
+    expect(stripQuotedReply(text)).toBe('Sure, Thursday works.');
+  });
+});

@@ -4,7 +4,7 @@ Answers replies to cold email campaigns run in [Instantly.ai](https://instantly.
 
 | Outcome | When | What happens |
 | --- | --- | --- |
-| **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. Opt-outs and declines are also marked unsubscribed in that client's Instantly workspace. |
+| **ignore** | Bare opt-outs (`stop`, `remove me`), simple declines, out-of-office, auto-replies | Logged and dropped. The bot also tries to mark opt-outs and declines unsubscribed in that client's Instantly workspace; if that fails or can't run, you get an alert. |
 | **draft** | Intent matches a reply template, confidence ≥ threshold, no escalation flags | Template rendered with the lead's details and the client's profile, posted to that client's Discord channel for approval. |
 | **alert** | Everything a human should see: no matching template, objections, referrals, complex negatives, escalation flags, long replies, low confidence, requests to follow up later, opt-out wording the model didn't read as an opt-out | Posted to Discord with the reply, the classification, and why it needs you. A follow-up-later alert also carries the reply to send once you have set the reminder. |
 
@@ -26,7 +26,8 @@ A webhook hitting an unknown slug still gets classified, but **never drafts** (i
 
 ```
 Instantly webhook (per-client URL)
-  → normalize   strip quoted history & signatures, flatten lead fields
+  → normalize   strip recognized quoted history and "Sent from my ..." lines
+                (not signatures), flatten lead fields
   → classify    rules fast-path for bare opt-outs, else OpenAI structured output
   → decide      ignore / draft / alert  (+ mark-unsubscribed side effect)
   → notify      Discord embed in the client's sub-channel

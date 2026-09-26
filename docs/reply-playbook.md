@@ -4,7 +4,7 @@ Every reply to a campaign lands in one of **three buckets**. Nothing is ever sen
 
 | Bucket | What it means |
 | --- | --- |
-| 🚫 **Ignored** | No reply sent, nothing posted. Opt-outs are also automatically unsubscribed in Instantly so they never get another email. |
+| 🚫 **Ignored** | No reply sent, nothing posted. The bot also tries to unsubscribe opt-outs in Instantly automatically; if that fails or can't run, a person gets an alert to do it by hand. |
 | ✍️ **Auto-draft** | The bot writes the reply below and posts it to Discord, ready to approve and send. |
 | 🔔 **Human alert** | No auto-reply. The full message is posted to Discord with why it needs a person. |
 
@@ -12,9 +12,9 @@ Anything in the template text like `[calendar link]` or `[what we do]` is filled
 
 ---
 
-## 🚫 Bucket 1 — Ignored (no reply, auto-unsubscribed)
+## 🚫 Bucket 1: Ignored (no reply, unsubscribe attempted)
 
-Short, bare rejections with nothing else in them. Replying to these has no upside, so the bot stays silent — but it **does** add the person to that client's Instantly block list immediately, so no follow-up emails ever go out.
+Short, bare rejections with nothing else in them. Replying to these has no upside, so the bot stays silent, but it **does** try to add the person to that client's Instantly block list right away, so no follow-up emails go out. If that fails or can't run, a warning posts to Discord so a person can do it by hand.
 
 Triggers (sign-offs like "…thanks, John" are fine — still counts):
 
@@ -37,7 +37,7 @@ Also ignored (but **not** unsubscribed — they may still convert later):
 
 ---
 
-## ✍️ Bucket 2 — Auto-drafted replies
+## ✍️ Bucket 2: Auto-drafted replies
 
 ### 1. Interested / wants to talk
 **They say:** "Yes let's chat" · "Sounds interesting" · "Sure" · "When are you free?" · "Tell me more" · "Book me in"
@@ -141,7 +141,7 @@ This one comes to Discord as an alert, not a draft: the reply promises a follow-
 
 ---
 
-## 🔔 Bucket 3 — Human alert (no auto-reply, posted to Discord)
+## 🔔 Bucket 3: Human alert (no auto-reply, posted to Discord)
 
 The bot never auto-replies to any of these. The full message, who sent it, and the reason land in the client's Discord channel.
 
