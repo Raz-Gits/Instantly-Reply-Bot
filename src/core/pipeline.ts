@@ -1,14 +1,43 @@
 import { classifyReply } from '../classify/index.js';
 import { notifyDiscord, notifyDiscordText } from '../integrations/discord.js';
-import { markLeadUnsubscribed } from '../integrations/instantly.js';
+import { markLeadUnsubscribed, type UnsubscribeResult } from '../integrations/instantly.js';
 import type { ClientProfile } from './clients.js';
 import { decide } from './decide.js';
 import { normalizeEvent } from './normalize.js';
-import type { Decision, InstantlyWebhook } from './types.js';
+import type { Decision, InstantlyWebhook, ReplyEvent } from './types.js';
+
+/** What actually happened to an opt-out, as opposed to what the decision asked for. */
+export type UnsubscribeOutcome = 'not_requested' | UnsubscribeResult['status'];
 
 export interface ProcessResult {
   decision: Decision;
   notified: boolean;
+  unsubscribe: UnsubscribeOutcome;
+}
+
+/**
+ * An opt-out the bot could not apply is the one failure that must not stay
+ * quiet: the lead can still be emailed until a person blocks them. So both
+ * "failed" and "skipped" post to Discord, and if that post fails too, the
+ * error log is the last place it shows up.
+ */
+async function alertUnappliedOptOut(
+  event: ReplyEvent,
+  client: ClientProfile,
+  result: Exclude<UnsubscribeResult, { status: 'done' }>,
+): Promise<void> {
+  const who = event.lead.email ? `**${event.lead.email}**` : 'a lead whose email was missing from the payload';
+  const verb = result.status === 'failed' ? 'Could not auto-unsubscribe' : 'Did not auto-unsubscribe';
+  const where = event.uniboxUrl ? ` Open in Instantly: ${event.uniboxUrl}` : '';
+  const posted = await notifyDiscordText(
+    `⚠️ ${verb} ${who} in ${client.clientName}'s workspace (${result.why}). They asked to opt out, so please add them to the block list by hand.${where}`,
+    client,
+  );
+  if (!posted) {
+    console.error(
+      `[pipeline] opt-out alert did not post: ${event.lead.email || '(no email)'} in ${client.slug} is still NOT unsubscribed (${result.status}: ${result.why})`,
+    );
+  }
 }
 
 /**
@@ -38,15 +67,14 @@ export async function processWebhook(
         unsubscribeLead: false,
       };
 
+  let unsubscribe: UnsubscribeOutcome = 'not_requested';
+  let unsubscribeWhy: string | null = null;
   if (decision.unsubscribeLead && client) {
     const result = await markLeadUnsubscribed(client, event.lead.email);
-    if (result.status === 'failed') {
-      await notifyDiscordText(
-        `⚠️ Could not auto-unsubscribe **${event.lead.email}** in ${client.clientName}'s workspace — please mark them manually. (${result.why})`,
-        client,
-      );
-    } else if (result.status === 'skipped') {
-      console.warn(`[instantly] unsubscribe skipped for ${event.lead.email}: ${result.why}`);
+    unsubscribe = result.status;
+    if (result.status !== 'done') {
+      unsubscribeWhy = result.why;
+      await alertUnappliedOptOut(event, client, result);
     }
   }
 
@@ -65,11 +93,13 @@ export async function processWebhook(
       source: classification.source,
       action: decision.action,
       template: decision.templateId ?? null,
-      unsubscribed: decision.unsubscribeLead,
+      unsubscribeRequested: decision.unsubscribeLead,
+      unsubscribe,
+      unsubscribeWhy,
       reason: decision.reason,
       notified,
     }),
   );
 
-  return { decision, notified };
+  return { decision, notified, unsubscribe };
 }

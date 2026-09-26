@@ -99,7 +99,7 @@ The suite covers the full routing matrix, per-client overrides, the playbook gua
 ## Failure behaviour
 
 - **OpenAI down** → reply classified `unclear` at confidence 0 → alert. Replies degrade to "a human reads it", never to lost.
-- **Unsubscribe API call fails** → a warning posts to the client's Discord channel asking for a manual unsubscribe. No key configured → skipped with a log line.
+- **Unsubscribe not applied** (the API call fails, no key is configured, or the payload has no lead email) → a warning posts to the client's Discord channel asking for a manual unsubscribe, and the log line records `unsubscribe: "failed"` or `"skipped"`, never a success. If that warning can't be posted either, it is logged as an error.
 - **Discord down** → logged, still `202` to Instantly.
 - **Unknown webhook slug** → classified + alerted to the global channel, never drafted.
 - **Bad secret** → `401`. **Malformed payload** → `400`. **Any event other than `reply_received`** → `202 ignored`, not processed. A payload with no `event_type` is still processed, with a warning in the log.

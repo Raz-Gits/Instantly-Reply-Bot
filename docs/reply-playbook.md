@@ -176,4 +176,4 @@ The bot never auto-replies to any of these. The full message, who sent it, and t
 
 ## The one automatic action
 
-The only thing the bot ever does without approval: when someone opts out or declines, their email is added to that client's Instantly block list so they never get emailed again. If that API call fails, a warning posts to Discord asking for a manual unsubscribe. Everything outbound — every reply — is human-approved.
+The only thing the bot ever does without approval: when someone opts out or declines, their email is added to that client's Instantly block list so they never get emailed again. If that can't be done (the API call fails, or the workspace has no API key set up), a warning posts to Discord asking for a manual unsubscribe. Everything outbound, every reply, is human-approved.
