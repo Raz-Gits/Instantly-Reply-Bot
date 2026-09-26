@@ -143,7 +143,7 @@ This public version ships with that call removed, so nobody who forks it emails 
 
 ### Before you turn auto-send back on
 
-An adversarial review of this repo assumed auto-send was on and looked for what would go wrong. The findings that only matter once the bot sends email are deferred, not dismissed. Each is a hard requirement before `sendReply` is called again:
+An [adversarial review of this repo](reviews/2026-09-26-codex-adversarial-review.md) assumed auto-send was on and looked for what would go wrong. The findings that only matter once the bot sends email are deferred, not dismissed. Each is a hard requirement before `sendReply` is called again:
 
 - **Finding 1:** the auto-send code in version control, behind a per-client `AUTO_SEND` flag that defaults to off.
 - **Finding 5:** a durable event ledger keyed by a stable provider event ID, written before the `202` goes back.
